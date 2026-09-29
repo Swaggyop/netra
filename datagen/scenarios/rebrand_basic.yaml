@@ -1,0 +1,47 @@
+# NETRA — Rebrand scenario (basic)
+# The easy demo case: ShadowX goes dormant, DarkWolf appears with same PGP + wallet
+
+scenario_name: rebrand_basic
+description: >
+  Basic persona migration with strong shared identifiers.
+  Expected outcome: PERSONA_MIGRATION alert with VERY_HIGH confidence.
+
+seed: 42
+time_span_days: 180
+
+actors: 20
+posts_per_actor: 15
+transactions: 50
+
+rebrand_pairs: 3
+decoys: 3
+
+# Override defaults for the demo pair
+overrides:
+  rebrand_pair_0:
+    difficulty: easy
+    dormancy_days: 21
+    reappear_window_days: 30
+    shared_identifiers:
+      - pgp_fingerprint
+      - btc_wallet
+      - contact_id
+    expected_score: ">= 90"
+    expected_band: VERY_HIGH
+
+  rebrand_pair_1:
+    difficulty: medium
+    dormancy_days: 14
+    reappear_window_days: 45
+    shared_identifiers:
+      - pgp_fingerprint
+    expected_score: ">= 75"
+    expected_band: HIGH
+
+  rebrand_pair_2:
+    difficulty: hard
+    dormancy_days: 14
+    reappear_window_days: 45
+    shared_identifiers: []  # stylometry only
+    expected_score: ">= 50"
+    expected_band: MODERATE

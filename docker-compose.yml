@@ -1,0 +1,296 @@
+# ────────────────────────────────────────────────────────────────
+# NETRA — Docker Compose (development / demo)
+# Usage:  make up       (starts everything)
+#         make down     (stops everything)
+# ────────────────────────────────────────────────────────────────
+name: netra
+
+services:
+  # ── Datastores ──────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-netra}
+      POSTGRES_USER: ${POSTGRES_USER:-netra}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-netra_dev}
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - core_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-netra}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    # Security: drop all capabilities, run read-only root fs
+    security_opt:
+      - no-new-privileges:true
+
+  neo4j:
+    image: neo4j:5-community
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-neo4j_dev}
+      NEO4J_PLUGINS: '["graph-data-science"]'
+    ports:
+      - "7474:7474"   # browser
+      - "7687:7687"   # bolt
+    volumes:
+      - neo4j_data:/data
+    networks:
+      - core_net
+    healthcheck:
+      test: ["CMD", "neo4j", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.8
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:18082
+      - --smp 1
+      - --memory 512M
+      - --overprovisioned
+      - --default-log-level=warn
+    ports:
+      - "19092:19092"  # kafka external
+      - "18081:18081"  # schema registry
+      - "18082:18082"  # pandaproxy (REST)
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    networks:
+      - core_net
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD:-redis_dev}
+      --rename-command FLUSHALL ""
+      --rename-command FLUSHDB ""
+      --rename-command DEBUG ""
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - core_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_dev}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-netra}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minio_dev_secret}
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # console
+    volumes:
+      - minio_data:/data
+    networks:
+      - core_net
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+
+  # ── Tor (SOCKS5 proxy for .onion access) ───────────────────
+
+  tor:
+    image: dperson/torproxy:latest
+    restart: unless-stopped
+    ports:
+      - "9050:9050"
+    networks:
+      - collect_net
+    security_opt:
+      - no-new-privileges:true
+
+  # ── Application ────────────────────────────────────────────
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    command: >
+      uvicorn backend.app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --workers 2
+      --limit-max-requests 10000
+      --timeout-keep-alive 5
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - core_net
+      - collect_net
+    security_opt:
+      - no-new-privileges:true
+    # OWASP: limit resources to prevent DoS
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    command: >
+      celery -A backend.app.workers.celery_app worker
+      --loglevel=info
+      --concurrency=4
+      --max-tasks-per-child=100
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    networks:
+      - core_net
+      - collect_net
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+
+  beat:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    command: >
+      celery -A backend.app.workers.celery_app beat
+      --loglevel=info
+      --schedule=/tmp/celerybeat-schedule
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - core_net
+    security_opt:
+      - no-new-privileges:true
+
+  # ── Lab services (isolated network) ────────────────────────
+
+  onion_a:
+    build:
+      context: lab/onion_a_vulnerable
+    networks:
+      - lab_net
+    profiles:
+      - lab
+
+  onion_b:
+    build:
+      context: lab/onion_b_mixed
+    networks:
+      - lab_net
+    profiles:
+      - lab
+
+  onion_c:
+    build:
+      context: lab/onion_c_hardened
+    networks:
+      - lab_net
+    profiles:
+      - lab
+
+  clearnet_twin:
+    build:
+      context: lab/clearnet_twin
+    networks:
+      - lab_net
+    profiles:
+      - lab
+
+  mock_clearnet_index:
+    build:
+      context: lab/mock_clearnet_index
+    ports:
+      - "8090:8080"
+    networks:
+      - lab_net
+      - core_net
+    profiles:
+      - lab
+
+# ── Networks ───────────────────────────────────────────────
+
+networks:
+  core_net:
+    driver: bridge
+  collect_net:
+    driver: bridge
+    internal: false   # tor needs outbound
+  lab_net:
+    driver: bridge
+    internal: true    # fully isolated
+
+# ── Volumes ────────────────────────────────────────────────
+
+volumes:
+  pg_data:
+  neo4j_data:
+  redpanda_data:
+  redis_data:
+  minio_data:

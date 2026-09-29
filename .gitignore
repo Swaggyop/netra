@@ -1,0 +1,80 @@
+# ── Secrets & Environment ──
+.env
+.env.local
+.env.*
+frontend/.env
+frontend/.env.local
+frontend/.env.*
+*.pem
+*.key
+
+# Preserve example config templates
+!.env.example
+!frontend/.env.example
+
+# ── Python ─────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ── Celery & Workers ───────
+celerybeat-schedule*
+celerybeat.pid
+
+# ── Node & Frontend (Next.js) ─
+node_modules/
+.next/
+frontend/.next/
+frontend/dist/
+frontend/out/
+out/
+.turbo/
+
+# ── Logs ───────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Data & Storage ─────────
+datasets/
+*.sqlite3
+*.db
+minio_data/
+
+# ── Presentation Assets ────
+ppt_assets/
+
+# ── IDE & Editors ──────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Docker ─────────────────
+docker-compose.override.yml
+
+# ── OS Generated ───────────
+.DS_Store
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+
+# ── Eval & Models ──────────
+eval/results/
+*.model
+*.pkl
+
