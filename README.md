@@ -92,4 +92,4 @@ DarkHub/
 
 ## License
 
-Built for Smart India Hackathon (SIH) 2024.
+Built for Smart India Hackathon (SIH) 2026.
