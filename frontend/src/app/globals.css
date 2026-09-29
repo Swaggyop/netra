@@ -219,6 +219,10 @@ body {
 .border-l-severity-high { border-left-color: var(--color-severity-high); }
 .border-l-severity-medium { border-left-color: var(--color-severity-medium); }
 .border-l-severity-low { border-left-color: var(--color-severity-low); }
+.border-t-cerulean { border-top-color: var(--color-cerulean); }
+.border-t-status-warn { border-top-color: var(--color-status-warn); }
+.border-t-signal-blue { border-top-color: var(--color-signal-blue); }
+.border-t-severity-critical { border-top-color: var(--color-severity-critical); }
 
 /* Typography scale */
 .font-headline-hero { font-family: "Fraunces", serif; font-size: 54px; line-height: 60px; letter-spacing: -0.02em; font-weight: 400; font-feature-settings: "liga" 0; }

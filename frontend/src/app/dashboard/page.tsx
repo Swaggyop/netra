@@ -21,6 +21,18 @@ const statusDot: Record<string, string> = {
   offline: "bg-status-error",
 };
 
+const statusText: Record<string, string> = {
+  online: "text-status-live",
+  degraded: "text-status-warn",
+  offline: "text-status-error",
+};
+
+const statusBadge: Record<string, string> = {
+  online: "bg-green-50 border-green-200 text-status-live",
+  degraded: "bg-amber-50 border-amber-200 text-status-warn",
+  offline: "bg-red-50 border-red-200 text-status-error",
+};
+
 export default function DashboardPage() {
   const [actorCount, setActorCount] = useState<number>(0);
   const [activeCount, setActiveCount] = useState<number>(0);
@@ -31,10 +43,9 @@ export default function DashboardPage() {
   const [clock, setClock] = useState<string>("");
 
   useEffect(() => {
-    // Set clock client-side only to avoid hydration mismatch
     const updateClock = () => {
       const now = new Date();
-      setClock(`Cycle: ${now.toISOString().slice(0, 10)} · Node UTC ${now.toUTCString().slice(17, 25)}`);
+      setClock(`${now.toISOString().slice(0, 10)} · ${now.toUTCString().slice(17, 25)} UTC`);
     };
     updateClock();
     const timer = setInterval(updateClock, 1000);
@@ -59,7 +70,6 @@ export default function DashboardPage() {
       if (m && typeof m.events_24h === "number") setEvents24h(m.events_24h);
     }).catch(() => {});
 
-    // Load real collected events from Redis into the Live Feed (initial load)
     pipeline.liveEvents(20).then((r) => {
       if (r && Array.isArray(r.events) && r.events.length > 0) {
         const entries: FeedEntry[] = r.events.map((e) => ({
@@ -80,7 +90,6 @@ export default function DashboardPage() {
   useWebSocket((msg) => {
     if (msg.channel === "events" && msg.data) {
       const entry = msg.data as FeedEntry;
-      // Deduplicate: skip if we already have an event with same source+title
       setFeed((prev) => {
         const key = `${entry.source}:${entry.title}`;
         const isDupe = prev.some((e) => `${e.source}:${e.title}` === key);
@@ -97,182 +106,287 @@ export default function DashboardPage() {
     low: "border-l-severity-low",
   };
 
+  const severityBadge: Record<string, string> = {
+    critical: "bg-red-50 text-severity-critical border border-red-200",
+    high: "bg-orange-50 text-severity-high border border-orange-200",
+    medium: "bg-amber-50 text-severity-medium border border-amber-200",
+    low: "bg-green-50 text-severity-low border border-green-200",
+  };
+
   const safeAlerts = Array.isArray(unreadAlerts) ? unreadAlerts : [];
+
+  const statCards = [
+    {
+      label: "Actors Tracked",
+      value: actorCount,
+      icon: "groups",
+      trend: "+3 this month",
+      trendCls: "text-status-live",
+      trendIcon: "trending_up",
+      sub: "5 advanced persistent campaigns",
+      accent: "border-t-2 border-t-cerulean",
+    },
+    {
+      label: "Active Groups",
+      value: activeCount,
+      icon: "deployed_code",
+      trend: "High syndicate posture",
+      trendCls: "text-status-warn",
+      trendIcon: "warning",
+      sub: "Cluster delta: 0 net closures",
+      accent: "border-t-2 border-t-status-warn",
+    },
+    {
+      label: "Events (24h)",
+      value: (events24h ?? 0).toLocaleString(),
+      icon: "dynamic_feed",
+      trend: "Live ingesting",
+      trendCls: "text-cerulean",
+      trendIcon: "radio_button_checked",
+      sub: "Normalized across all sources",
+      accent: "border-t-2 border-t-signal-blue",
+    },
+    {
+      label: "Unread Alerts",
+      value: safeAlerts.length,
+      icon: "crisis_alert",
+      trend: `${safeAlerts.filter(a => a?.severity === "critical").length} critical`,
+      trendCls: "text-severity-critical",
+      trendIcon: "priority_high",
+      sub: "Immediate triage mandated",
+      accent: "border-t-2 border-t-severity-critical",
+      valueCls: "text-severity-critical",
+    },
+  ];
 
   return (
     <AppLayout>
-      {/* Page header */}
-      <div className="border-b border-mist pb-6 mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="px-2 py-0.5 rounded bg-surface-container border border-mist text-ash text-[11px] font-code-compact">DS-ID: 2025-05-89X</span>
-            <span className="text-ash text-body-caption">·</span>
-            <span className="text-ash text-body-caption">Compartment Alpha-Seven</span>
+      {/* ── Page header ─────────────────────────────── */}
+      <div className="mb-8">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-6 border-b border-mist">
+          <div className="space-y-2">
+            {/* Breadcrumb / classification row */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-surface-container border border-mist text-ash text-[11px] font-code-compact">
+                <span className="w-1.5 h-1.5 rounded-full bg-status-live" />
+                DS-ID: 2025-05-89X
+              </span>
+              <span className="text-fog text-[11px]">/</span>
+              <span className="text-ash text-[12px] font-body-caption">Compartment Alpha-Seven</span>
+            </div>
+
+            {/* Title */}
+            <h1 className="text-[32px] leading-tight font-bold text-graphite tracking-tight" style={{ fontFamily: "Fraunces, serif", fontWeight: 500 }}>
+              Overview
+            </h1>
+            <p className="text-ash text-[14px] leading-relaxed max-w-md">
+              Operational Threat Intelligence & Disruption Summary
+            </p>
           </div>
-          <h1 className="font-headline-xl text-headline-xl text-graphite tracking-tight">Overview</h1>
-          <p className="font-body-reading text-ash text-[15px] mt-1">Operational Threat Intelligence &amp; Disruption Summary</p>
-        </div>
-        <div className="text-code-default font-code-default text-charcoal text-[13px] bg-paper px-3 py-1.5 rounded-lg border border-mist shadow-sm">
-          {clock || "Cycle: —"}
+
+          {/* Clock + status */}
+          <div className="flex flex-col items-end gap-2 shrink-0">
+            <div className="flex items-center gap-2 px-3 py-2 bg-paper border border-mist rounded-lg shadow-sm">
+              <span className="material-symbols-outlined text-ash text-[15px]">schedule</span>
+              <span className="text-[12px] font-code-compact text-charcoal">{clock || "—"}</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-50 border border-green-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-status-live animate-pulse" />
+              <span className="text-[11px] font-label-uppercase text-status-live">All Systems Nominal</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {[
-          { label: "Actors Tracked", value: actorCount, icon: "groups", badge: "+3 this month", badgeCls: "text-status-live" },
-          { label: "Active Groups", value: activeCount, icon: "deployed_code", badge: "High syndicate posture", badgeCls: "text-charcoal" },
-          { label: "Events (24h)", value: (events24h ?? 0).toLocaleString(), icon: "dynamic_feed", badge: "↑ live ingests", badgeCls: "text-cerulean" },
-          { label: "Unread Alerts", value: safeAlerts.length, icon: "crisis_alert", badge: `${safeAlerts.filter(a => a?.severity === "critical").length} critical`, badgeCls: "text-severity-critical", valueCls: "text-severity-critical" },
-        ].map((card) => (
-          <div key={card.label} className="bg-paper p-space-md rounded-xl border border-mist shadow-editorial flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-label-ui font-label-ui text-ash">{card.label}</span>
-              <span className="material-symbols-outlined text-ash text-[18px]">{card.icon}</span>
-            </div>
-            <div className="flex items-baseline justify-between mt-1">
-              <span className={`font-headline-xl text-headline-xl leading-none ${card.valueCls ?? "text-graphite"}`}>{card.value}</span>
-              <span className={`inline-flex items-center text-[11px] font-label-uppercase px-2 py-0.5 rounded-full bg-linen border border-mist font-medium ${card.badgeCls}`}>
-                {card.badge}
-              </span>
-            </div>
-            <div className="mt-3 pt-2.5 border-t border-mist/60 text-[12px] font-body-caption text-ash">
-              {card.label === "Actors Tracked" ? "5 advanced persistent campaigns" :
-               card.label === "Active Groups" ? "Cluster delta: 0 net closures" :
-               card.label === "Events (24h)" ? "Normalized across sources" :
-               "Immediate triage mandated"}
+      {/* ── Stat cards ──────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-10">
+        {statCards.map((card) => (
+          <div key={card.label} className={`bg-paper rounded-xl border border-mist shadow-sm overflow-hidden ${card.accent}`}>
+            <div className="p-5">
+              {/* Label + icon */}
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-[11px] font-label-uppercase text-ash tracking-wider">{card.label}</span>
+                <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center">
+                  <span className="material-symbols-outlined text-charcoal text-[17px]">{card.icon}</span>
+                </div>
+              </div>
+
+              {/* Value */}
+              <div className={`text-[36px] leading-none font-bold tracking-tight mb-3 ${card.valueCls ?? "text-graphite"}`} style={{ fontFamily: "Fraunces, serif", fontWeight: 500 }}>
+                {card.value}
+              </div>
+
+              {/* Trend pill */}
+              <div className="flex items-center gap-1.5 mb-3">
+                <span className={`material-symbols-outlined text-[13px] ${card.trendCls}`}>{card.trendIcon}</span>
+                <span className={`text-[12px] font-medium ${card.trendCls}`}>{card.trend}</span>
+              </div>
+
+              {/* Sub-label */}
+              <div className="pt-3 border-t border-mist">
+                <p className="text-[12px] text-ash leading-snug">{card.sub}</p>
+              </div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* 2-column grid */}
+      {/* ── 2-column content grid ───────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left col */}
+
+        {/* Left col — 8/12 */}
         <div className="lg:col-span-8 space-y-8">
+
           {/* Source health */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
+          <section>
+            <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="font-headline-lg text-headline-lg text-graphite">Source Status</h3>
-                <p className="text-body-caption text-ash">Health telemetry across primary crawler nodes and continuous listeners</p>
+                <h2 className="text-[20px] font-semibold text-graphite tracking-tight" style={{ fontFamily: "Fraunces, serif", fontWeight: 400 }}>
+                  Source Status
+                </h2>
+                <p className="text-[13px] text-ash mt-0.5">Health telemetry across primary crawler nodes</p>
               </div>
               <button
                 onClick={() => pipeline.health().then((s) => { if (Array.isArray(s)) setSources(s); }).catch(() => {})}
-                className="inline-flex items-center gap-1 text-label-ui font-label-ui text-charcoal hover:text-cerulean transition-colors"
+                className="inline-flex items-center gap-1.5 text-[13px] font-medium text-charcoal hover:text-cerulean transition-colors px-3 py-1.5 rounded-lg hover:bg-linen border border-transparent hover:border-mist"
               >
-                <span className="material-symbols-outlined text-[16px]">refresh</span>
+                <span className="material-symbols-outlined text-[15px]">refresh</span>
                 <span>Poll All</span>
               </button>
             </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
               {!Array.isArray(sources) || sources.length === 0 ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <div key={i} className="bg-paper border border-mist rounded-xl p-4 animate-pulse">
-                    <div className="h-3 bg-linen rounded mb-2 w-3/4" />
-                    <div className="h-2 bg-linen rounded w-1/2" />
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-2 h-2 rounded-full bg-linen" />
+                      <div className="h-3 bg-linen rounded w-3/4" />
+                    </div>
+                    <div className="h-2.5 bg-linen rounded w-1/2 mb-1.5" />
+                    <div className="h-2 bg-linen rounded w-1/3" />
                   </div>
                 ))
               ) : sources.map((src) => (
-                <div key={src.name} className="bg-paper border border-mist rounded-xl p-4 shadow-diagram">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-body-emphasis text-body-default text-ink-black">{src.name}</span>
-                    <div className="flex items-center gap-1.5">
-                      <span className={`w-2 h-2 rounded-full ${statusDot[src.status] ?? "bg-fog"}`} />
-                      <span className="text-[11px] font-code-compact text-ash capitalize">{src.status}</span>
+                <div key={src.name} className="bg-paper border border-mist rounded-xl p-4 hover:shadow-sm transition-shadow">
+                  <div className="flex items-start justify-between mb-3">
+                    <span className="text-[13px] font-semibold text-graphite leading-snug flex-1 min-w-0 mr-2 truncate">{src.name}</span>
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border shrink-0 ${statusBadge[src.status] ?? "bg-linen border-mist text-ash"}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${statusDot[src.status] ?? "bg-fog"}`} />
+                      {src.status}
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-[11px] text-ash">
+                      {src.last_success ? `Last run: ${new Date(src.last_success).toLocaleTimeString()}` : "Not yet run"}
                     </div>
-                  </div>
-                  <div className="text-[12px] font-body-caption text-ash">
-                    {src.last_success ? `Last: ${new Date(src.last_success).toLocaleTimeString()}` : "Not run"}
-                  </div>
-                  <div className="text-[12px] font-code-compact text-charcoal mt-1">
-                    {src.events_24h.toLocaleString()} events / 24h
+                    <div className="text-[12px] font-semibold text-charcoal font-mono">
+                      {src.events_24h.toLocaleString()} events / 24h
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
+          </section>
 
           {/* Recent alerts */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-headline-lg text-headline-lg text-graphite">Recent Alerts</h3>
-              <Link href="/alerts" className="text-label-ui font-label-ui text-cerulean hover:opacity-80 transition-opacity flex items-center gap-1">
-                View all <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-[20px] font-semibold text-graphite tracking-tight" style={{ fontFamily: "Fraunces, serif", fontWeight: 400 }}>
+                  Recent Alerts
+                </h2>
+                <p className="text-[13px] text-ash mt-0.5">Unread threat alerts requiring attention</p>
+              </div>
+              <Link href="/alerts" className="inline-flex items-center gap-1 text-[13px] font-medium text-cerulean hover:opacity-80 transition-opacity">
+                View all
+                <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
               </Link>
             </div>
-            {safeAlerts.length === 0 ? (
-              <div className="bg-paper border border-mist rounded-xl p-6 text-center text-ash text-body-caption">
-                No active threat alerts matching current filters.
-              </div>
-            ) : safeAlerts.map((a) => (
-              <div key={a.id} className={`bg-paper border border-mist rounded-xl p-4 shadow-editorial border-l-4 ${severityBorder[a.severity] ?? "border-l-fog"}`}>
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={`text-[11px] font-label-uppercase tracking-widest font-semibold text-${a.severity === "critical" ? "severity-critical" : a.severity === "high" ? "severity-high" : "severity-medium"}`}>
-                        {a.severity.toUpperCase()}
-                      </span>
-                      {a.actor_handle && (
-                        <Link href={`/actors/${a.actor_id}`} className="text-[11px] font-label-ui text-cerulean hover:opacity-80">
-                          {a.actor_handle}
-                        </Link>
-                      )}
-                    </div>
-                    <p className="font-body-default text-body-default text-graphite line-clamp-1">{a.title}</p>
-                    <p className="font-body-caption text-body-caption text-ash mt-0.5 line-clamp-1">{a.body}</p>
-                  </div>
-                  <Link href="/alerts" className="text-cerulean hover:opacity-80 shrink-0">
-                    <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
-                  </Link>
+
+            <div className="space-y-3">
+              {safeAlerts.length === 0 ? (
+                <div className="bg-paper border border-mist rounded-xl p-8 text-center">
+                  <span className="material-symbols-outlined text-fog text-[32px] mb-2 block">check_circle</span>
+                  <p className="text-[14px] text-ash">No active threat alerts matching current filters.</p>
                 </div>
-              </div>
-            ))}
-          </div>
+              ) : safeAlerts.map((a) => (
+                <div key={a.id} className={`bg-paper border border-mist rounded-xl p-4 border-l-4 hover:shadow-sm transition-shadow ${severityBorder[a.severity] ?? "border-l-fog"}`}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <span className={`text-[10px] font-bold tracking-widest px-2 py-0.5 rounded ${severityBadge[a.severity] ?? "bg-linen text-ash border border-mist"}`}>
+                          {a.severity?.toUpperCase()}
+                        </span>
+                        {a.actor_handle && (
+                          <Link href={`/actors/${a.actor_id}`} className="text-[12px] font-medium text-cerulean hover:opacity-80 inline-flex items-center gap-0.5">
+                            <span className="material-symbols-outlined text-[13px]">person</span>
+                            {a.actor_handle}
+                          </Link>
+                        )}
+                      </div>
+                      <p className="text-[14px] font-semibold text-graphite mb-0.5 line-clamp-1">{a.title}</p>
+                      <p className="text-[13px] text-ash line-clamp-1">{a.body}</p>
+                    </div>
+                    <Link href="/alerts" className="text-cerulean hover:opacity-80 shrink-0 p-1 rounded hover:bg-linen transition-colors">
+                      <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
 
-        {/* Right col */}
-        <div className="lg:col-span-4 space-y-4">
+        {/* Right col — 4/12 */}
+        <div className="lg:col-span-4 space-y-5">
+
           {/* Live feed */}
-          <div className="bg-paper border border-mist rounded-xl shadow-editorial h-[420px] flex flex-col overflow-hidden">
-            <div className="p-4 border-b border-mist flex items-center justify-between shrink-0">
+          <div className="bg-paper border border-mist rounded-xl shadow-sm overflow-hidden flex flex-col" style={{ height: 440 }}>
+            {/* Feed header */}
+            <div className="px-4 py-3 border-b border-mist flex items-center justify-between shrink-0 bg-linen">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-status-live animate-pulse" />
-                <span className="font-body-emphasis text-body-default text-graphite">Live Feed</span>
+                <span className="text-[13px] font-semibold text-graphite">Live Feed</span>
               </div>
-              <span className="text-[11px] font-code-compact text-ash">ws://feed</span>
+              <span className="text-[10px] font-code-compact text-ash bg-surface-container px-2 py-0.5 rounded border border-mist">ws://feed</span>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scroll">
+
+            {/* Feed entries */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-0">
               {feed.length === 0 ? (
-                <p className="text-ash font-body-caption text-body-caption text-center mt-8">Waiting for events…</p>
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <span className="material-symbols-outlined text-fog text-[28px] mb-2">wifi_tethering</span>
+                  <p className="text-[13px] text-ash">Waiting for events…</p>
+                </div>
               ) : feed.map((ev) => (
-                <div key={ev.id} className="border-b border-mist/50 pb-2 last:border-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="font-code-compact text-code-compact text-ash">
+                <div key={ev.id} className="py-2.5 border-b border-mist/50 last:border-0">
+                  <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                    <span className="text-[10px] font-mono text-fog">
                       {new Date(ev.timestamp).toLocaleTimeString()}
                     </span>
-                    <span className="bg-surface-container border border-mist px-1.5 py-0.5 rounded text-[10px] font-label-ui text-charcoal">
+                    <span className="bg-surface-container border border-mist px-1.5 py-0.5 rounded text-[10px] font-medium text-charcoal">
                       {ev.source}
                     </span>
                     {ev.severity && ev.severity !== "info" && (
-                      <span className={`text-[10px] font-label-uppercase px-1.5 py-0.5 rounded ${
-                        ev.severity === "critical" ? "bg-severity-critical/10 text-severity-critical" :
-                        ev.severity === "warning" ? "bg-severity-medium/10 text-severity-medium" :
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                        ev.severity === "critical" ? "bg-red-50 text-severity-critical" :
+                        ev.severity === "warning" ? "bg-amber-50 text-severity-medium" :
                         "bg-linen text-ash"
                       }`}>{ev.severity}</span>
                     )}
                   </div>
                   {ev.title ? (
-                    <p className="text-[12px] font-body-reading text-graphite">{ev.title}</p>
+                    <p className="text-[12px] text-graphite leading-snug">{ev.title}</p>
                   ) : (
                     <div className="flex flex-wrap gap-1">
                       {ev.entity_kinds?.map((k) => (
-                        <span key={k} className="text-[10px] font-label-uppercase bg-linen border border-mist text-ash px-1.5 py-0.5 rounded">{k}</span>
+                        <span key={k} className="text-[10px] bg-linen border border-mist text-ash px-1.5 py-0.5 rounded">{k}</span>
                       ))}
                     </div>
                   )}
                   {ev.entities_found != null && ev.entities_found > 0 && (
-                    <span className="text-[10px] font-code-compact text-cerulean mt-0.5 inline-block">
+                    <span className="text-[11px] font-mono text-cerulean mt-0.5 inline-block">
                       {ev.entities_found.toLocaleString()} items
                     </span>
                   )}
@@ -282,20 +396,28 @@ export default function DashboardPage() {
           </div>
 
           {/* Quick actions */}
-          <div className="bg-paper border border-mist rounded-xl p-4 shadow-editorial">
-            <h4 className="font-body-emphasis text-body-default text-graphite mb-3">Quick Actions</h4>
-            <div className="space-y-2">
+          <div className="bg-paper border border-mist rounded-xl shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-mist bg-linen">
+              <h3 className="text-[13px] font-semibold text-graphite">Quick Actions</h3>
+            </div>
+            <div className="p-2">
               {[
-                { label: "Run Graph Analytics", icon: "hub", href: "/pipeline" },
-                { label: "Browse All Actors", icon: "person_alert", href: "/actors" },
-                { label: "Search Intelligence", icon: "search", href: "/search" },
-                { label: "Triage Alerts", icon: "notifications_active", href: "/alerts" },
+                { label: "Run Graph Analytics", icon: "hub", href: "/pipeline", desc: "Process intel graph" },
+                { label: "Browse All Actors", icon: "person_alert", href: "/actors", desc: "Actor registry" },
+                { label: "Search Intelligence", icon: "search", href: "/search", desc: "Query the archive" },
+                { label: "Triage Alerts", icon: "notifications_active", href: "/alerts", desc: "Review unread alerts" },
               ].map((action) => (
                 <Link key={action.label} href={action.href}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-linen text-charcoal hover:text-ink-black transition-colors font-label-ui text-label-ui">
-                  <span className="material-symbols-outlined text-[18px]">{action.icon}</span>
-                  <span>{action.label}</span>
-                  <span className="material-symbols-outlined text-[16px] ml-auto text-ash">arrow_forward</span>
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-linen transition-colors group"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center shrink-0 group-hover:bg-surface-container-high transition-colors">
+                    <span className="material-symbols-outlined text-charcoal text-[15px]">{action.icon}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-medium text-graphite leading-tight">{action.label}</div>
+                    <div className="text-[11px] text-ash">{action.desc}</div>
+                  </div>
+                  <span className="material-symbols-outlined text-fog text-[15px] group-hover:text-charcoal transition-colors">arrow_forward</span>
                 </Link>
               ))}
             </div>
