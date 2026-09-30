@@ -114,75 +114,117 @@ India faces an escalating dark web threat landscape:
 ## `02` Architecture
 
 ```mermaid
-graph TB
-    subgraph Sources["DATA SOURCES"]
+flowchart TB
+    subgraph SOURCES["🌐 INGESTION & DATA SOURCES"]
         direction LR
-        S1["Tor Network"]
-        S2["Ransomware Trackers"]
-        S3["Blockchain Explorers"]
-        S4["OSINT Feeds"]
-        S5["Cert Transparency"]
+        S1["🧅 <b>Tor Network</b><br/><i>Relays, Bridges & .onion Hidden Services</i>"]
+        S2["⚡ <b>Ransomware Trackers</b><br/><i>RansomWatch & RansomLook Leaks</i>"]
+        S3["⛓️ <b>Blockchain Ledgers</b><br/><i>BTC Mempool & Multi-Chain Explorers</i>"]
+        S4["🛡️ <b>Threat Feeds & IOCs</b><br/><i>Abuse.ch, AlienVault OTX & PhishTank</i>"]
+        S5["📜 <b>Cert Transparency</b><br/><i>crt.sh & Real-time CertStream Logs</i>"]
     end
 
-    subgraph Collection["COLLECTION LAYER"]
-        CW["Celery Workers\n22 Adapters"]
-        CB["Celery Beat\nScheduler"]
+    subgraph INGESTION["⚙️ COLLECTION & ANALYTIC PIPELINE"]
+        direction TB
+        BEAT(["⏰ <b>Celery Beat</b><br/><i>Periodic Scheduler & Dispatcher</i>"])
+        WORKER[["🔄 <b>Celery Async Workers</b><br/><i>22 Concurrent Live Crawler Adapters</i>"]]
+
+        subgraph PIPELINE["Core Analytics Engine"]
+            direction LR
+            NER["🔤 <b>spaCy NER</b><br/><i>Entity Extraction</i>"]
+            DEDUP["🔍 <b>Murmur3</b><br/><i>Hash Deduplication</i>"]
+            SCORE["📊 <b>Severity Engine</b><br/><i>Threat Index (0–100)</i>"]
+            LINK["🧬 <b>Bayesian LLR</b><br/><i>Persona Linker</i>"]
+        end
+
+        BEAT -.->|Dispatches Cron Jobs| WORKER
+        WORKER --> NER --> DEDUP --> SCORE --> LINK
     end
 
-    subgraph Storage["STORAGE LAYER"]
+    subgraph STORAGE["💾 POLYGLOT PERSISTENCE FABRIC"]
         direction LR
-        PG[("PostgreSQL 16\nActors, Entities\nAudit Logs")]
-        RD[("Redis 7\nReal-time Events\nTask Broker")]
-        N4[("Neo4j 5\nKnowledge Graph\nRelationships")]
+        PG[("🐘 <b>PostgreSQL 16</b><br/><i>Actors, Entities, Links<br/>§65B Immutable Audit Log</i>")]
+        N4[("🕸️ <b>Neo4j 5</b><br/><i>Knowledge Graph Network<br/>Graph Data Science (GDS)</i>")]
+        RD[("⚡ <b>Redis 7</b><br/><i>Celery Broker, Event Bus<br/>Sub-second Pub/Sub Feed</i>")]
     end
 
-    subgraph Backend["APPLICATION LAYER"]
-        API["FastAPI Backend\nREST + WebSocket\nJWT Auth, RBAC"]
+    subgraph APP["🚀 APPLICATION GATEWAY"]
+        API[["⚡ <b>FastAPI Async Gateway</b><br/><i>REST Endpoints • WebSocket Feed • JWT & RBAC Security • SlowAPI Rate Limits</i>"]]
     end
 
-    subgraph Frontend["PRESENTATION LAYER"]
-        UI["Next.js 16 Dashboard\nReact 19 + Cytoscape.js\nReal-time Graph Explorer"]
+    subgraph PRESENTATION["🖥️ INVESTIGATOR CONSOLE"]
+        UI["💻 <b>Next.js 16 Dashboard</b><br/><i>React 19 • Cytoscape.js Graph Explorer • IT Act §65B Certified PDF Exports</i>"]
     end
 
-    S1 & S2 & S3 & S4 & S5 --> CW
-    CB -.->|schedule| CW
-    CW --> PG & RD & N4
-    PG & RD & N4 --> API
-    API --> UI
-    API -.->|WebSocket| UI
+    S1 & S2 & S3 & S4 & S5 -->|Raw Feeds & Onion Scrapes| WORKER
+    LINK -->|Persist Intelligence & Audit| PG
+    LINK -->|Sync Graph Topology & Edges| N4
+    LINK -->|Broadcast Live Alert Events| RD
+    PG & N4 & RD <-->|Query, Traverse & Subscribe| API
+    API <-->|REST API + Secure WebSockets| UI
 
-    style Sources fill:#1a1a1a,stroke:#333,color:#fff
-    style Collection fill:#111,stroke:#444,color:#fff
-    style Storage fill:#0d0d0d,stroke:#333,color:#fff
-    style Backend fill:#111,stroke:#444,color:#fff
-    style Frontend fill:#1a1a1a,stroke:#333,color:#fff
+    classDef sourceStyle fill:#1e293b,stroke:#64748b,stroke-width:1.5px,color:#f8fafc;
+    classDef workerStyle fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef pipeStyle fill:#18181b,stroke:#818cf8,stroke-width:1.5px,color:#f8fafc;
+    classDef storeStyle fill:#09090b,stroke:#10b981,stroke-width:1.5px,color:#f8fafc;
+    classDef apiStyle fill:#0f172a,stroke:#f59e0b,stroke-width:2px,color:#f8fafc;
+    classDef uiStyle fill:#18181b,stroke:#f43f5e,stroke-width:2px,color:#f8fafc;
+
+    class S1,S2,S3,S4,S5 sourceStyle;
+    class BEAT,WORKER workerStyle;
+    class NER,DEDUP,SCORE,LINK pipeStyle;
+    class PG,N4,RD storeStyle;
+    class API apiStyle;
+    class UI uiStyle;
 ```
 
 ### Docker Service Topology
 
 ```mermaid
-graph LR
-    subgraph Docker["docker-compose.yml"]
-        PG["postgres:16-alpine\n:5433"]
-        N4["neo4j:5-community\n:7474 :7687"]
-        RD["redis:7-alpine\n:6379"]
-        API["api / uvicorn\n:8000"]
-        WK["worker / celery"]
-        FE["frontend / next.js\n:3000"]
+flowchart LR
+    subgraph INGRESS["INGRESS & PRESENTATION"]
+        direction TB
+        FE["💻 <b>frontend</b><br/>Next.js 16 + React 19<br/><code>Host Port 3000:3000</code>"]
+        API["⚡ <b>api / gateway</b><br/>FastAPI + Uvicorn Async<br/><code>Host Port 8000:8000</code>"]
     end
 
-    API --> PG & N4 & RD
-    WK --> PG & N4 & RD
-    FE -->|HTTP + WS| API
-    WK -.->|broker| RD
+    subgraph WORKERS["ASYNC INTELLIGENCE WORKERS"]
+        direction TB
+        WK["🔄 <b>worker</b><br/>Celery Distributed Task Engine<br/><i>22 Live Zero-Cost Adapters</i>"]
+        BT["⏰ <b>beat</b><br/>Celery Beat Scheduler<br/><i>Autonomous Crawl Intervals</i>"]
+        TOR["🧅 <b>tor</b><br/>SOCKS5 Onion Routing Proxy<br/><code>Container Port 9050</code>"]
+    end
 
-    style Docker fill:#0a0a0a,stroke:#333,color:#ccc
-    style PG fill:#336791,stroke:#fff,color:#fff
-    style N4 fill:#008CC1,stroke:#fff,color:#fff
-    style RD fill:#DC382D,stroke:#fff,color:#fff
-    style API fill:#009688,stroke:#fff,color:#fff
-    style WK fill:#6a1b9a,stroke:#fff,color:#fff
-    style FE fill:#000,stroke:#fff,color:#fff
+    subgraph STORAGE["DATASTORES & EVENT FABRIC"]
+        direction TB
+        PG[("🐘 <b>postgres</b> (16-alpine)<br/>Relational & Audit Ledger<br/><code>Port 5433:5432</code>")]
+        N4[("🕸️ <b>neo4j</b> (5-community)<br/>Knowledge Graph Engine<br/><code>Ports 7474, 7687</code>")]
+        RD[("⚡ <b>redis</b> (7-alpine)<br/>Broker, Cache & Pub/Sub<br/><code>Port 6379:6379</code>")]
+        MN[("🪣 <b>minio</b> (S3-compatible)<br/>Forensic Snapshot Storage<br/><code>Ports 9000, 9001</code>")]
+    end
+
+    FE <-->|HTTP REST & WebSockets| API
+    API -->|Read & Write State| PG
+    API -->|Cypher Ego-Graph Queries| N4
+    API -->|Session Cache & Event Streams| RD
+    API -->|Dossier Snapshot Artifacts| MN
+
+    BT -.->|Schedule Collection Tasks| RD
+    WK <-->|Consume Celery Tasks| RD
+    WK -->|Route Scrapes Anonymously| TOR
+    WK -->|Persist Normalised Entities| PG
+    WK -->|Synchronize Graph Nodes & Edges| N4
+    WK -->|Archive Raw Evidence Snapshots| MN
+
+    classDef feStyle fill:#09090b,stroke:#f43f5e,stroke-width:1.5px,color:#f8fafc;
+    classDef apiStyle fill:#0f172a,stroke:#f59e0b,stroke-width:1.5px,color:#f8fafc;
+    classDef workerStyle fill:#18181b,stroke:#38bdf8,stroke-width:1.5px,color:#f8fafc;
+    classDef storeStyle fill:#09090b,stroke:#10b981,stroke-width:1.5px,color:#f8fafc;
+
+    class FE feStyle;
+    class API apiStyle;
+    class WK,BT,TOR workerStyle;
+    class PG,N4,RD,MN storeStyle;
 ```
 
 ---
@@ -191,71 +233,123 @@ graph LR
 
 ```mermaid
 flowchart TD
-    subgraph P1["PHASE 1: COLLECTION"]
-        BEAT["Celery Beat\nScheduler"] -->|dispatch| WORKER["Celery Workers"]
-        WORKER --> A1["ransomware_tracker.py\nRansomWatch, RansomLook"]
-        WORKER --> A2["abuse_ch.py\nFeodo, URLhaus, ThreatFox"]
-        WORKER --> A3["tor_network.py\nOnionoo relays/bridges"]
-        WORKER --> A4["onion_probe.py\n.onion reachability + TLS"]
-        WORKER --> A5["onion_crawler.py\nAhmia BFS crawler"]
-        WORKER --> A6["blockchain.py\nMempool, Blockchain.com"]
-        WORKER --> A7["cert_transparency.py\ncrt.sh, CertStream"]
-        WORKER --> A8["osint_feeds.py\nOTX, PhishTank"]
-        WORKER --> A9["detection_rules.py\nSigma, CISA KEV"]
-        WORKER --> A10["supplementary.py\nDShield, GreyNoise"]
+    subgraph P1["PHASE 1: MULTI-SOURCE INGESTION"]
+        direction TB
+        subgraph ADAPTERS["22 Live Zero-Cost Intelligence Crawlers"]
+            direction LR
+            C1["🧅 <b>Dark Web & Onion</b><br/>• Ahmia BFS Web Crawler<br/>• Onionoo Relay Monitor<br/>• Onion Probe (HTTP/TLS)"]
+            C2["⚡ <b>Threat & Malware Feeds</b><br/>• RansomWatch & RansomLook<br/>• Abuse.ch (URLhaus/ThreatFox)<br/>• Feodo Botnet C2 Tracker"]
+            C3["⛓️ <b>Blockchain & Wallets</b><br/>• Mempool.space BTC API<br/>• Blockchain.com Explorer<br/>• Multi-Chain Address Parser"]
+            C4["📜 <b>OSINT & Infrastructure</b><br/>• crt.sh / CertStream CT Logs<br/>• AlienVault OTX Pulses<br/>• CISA KEV & Sigma Rules"]
+        end
+        SCHED["⏰ Celery Beat & Autonomous Scheduler"] --> C1 & C2 & C3 & C4
     end
 
-    subgraph P2["PHASE 2: PROCESSING"]
-        NER["Entity Extraction\nspaCy NER"] --> DEDUP["Deduplication\nmmh3 hashing"]
-        DEDUP --> SCORE["Severity Scoring\n0-100 scale"]
-        SCORE --> LINK["Persona Linking\nBayesian LLR"]
+    subgraph P2["PHASE 2: ANALYTIC ENRICHMENT PIPELINE"]
+        direction TB
+        E1["🔤 <b>Entity Extraction (NER)</b><br/>spaCy Transformer Model extracts Wallets, .onions, IPs, Emails, PGP & Handles"]
+        E2["🔍 <b>Deduplication & Provenance Scoring</b><br/>MurmurHash3 (mmh3) deduplication + Source Reliability Bands (A–E)"]
+        E3["📊 <b>Multi-Factor Severity Scoring</b><br/>Dynamic 0–100 threat assessment incorporating reach, exploitability & infrastructure"]
+        E4["🧬 <b>Bayesian Persona Linker</b><br/>Pairwise Log-Likelihood Ratio (LLR) calculation across handles, crypto & infrastructure"]
+
+        E1 --> E2 --> E3 --> E4
     end
 
-    subgraph P3["PHASE 3: STORAGE"]
+    subgraph P3["PHASE 3: POLYGLOT PERSISTENCE & GRAPH"]
         direction LR
-        PG[("PostgreSQL\nActors, Entities\nPersonaLinks, Audit")]
-        RD[("Redis\nEvents, Runs\nPub/Sub")]
-        N4[("Neo4j\nGraph Nodes\nEdges")]
+        S_PG[("🐘 <b>PostgreSQL 16</b><br/>• Threat Actors & Aliases<br/>• Normalized Entity Tables<br/>• §65B Immutable Audit Log")]
+        S_NEO[("🕸️ <b>Neo4j 5 Graph</b><br/>• Actor Knowledge Graph<br/>• Crypto Wallet Transfers<br/>• Infrastructure Hosting Edges")]
+        S_RD[("⚡ <b>Redis 7</b><br/>• Real-time WebSocket Feed<br/>• In-Memory Ring Buffer<br/>• Celery Task Queue Cache")]
     end
 
-    subgraph P4["PHASE 4: DELIVERY"]
-        REST["REST API\n/actors /search /alerts"]
-        WS["WebSocket\nws://feed"]
-        EXP["Exports\nPDF / CSV / JSON"]
-        GRAPH["Graph API\nCytoscape data"]
+    subgraph P4["PHASE 4: CONSUMPTION & ACTIONABLE DISRUPTION"]
+        direction LR
+        OUT_WS["📡 <b>Real-time SOC Feed</b><br/>Sub-second WebSocket alert feed streaming directly to monitoring analysts"]
+        OUT_ACT["👤 <b>Actor Dossiers</b><br/>360° Profile view with historical timeline, corroborated evidence & entity tags"]
+        OUT_GRAPH["🕸️ <b>Interactive Graph</b><br/>Cytoscape.js interactive topological traversal with dynamic depth exploration"]
+        OUT_EXP["⚖️ <b>Court-Ready Exports</b><br/>Evidence packages in PDF (IT Act §65B format), CSV, and structured JSON"]
     end
 
-    A1 & A2 & A3 & A4 & A5 & A6 & A7 & A8 & A9 & A10 --> NER
-    LINK --> PG & RD & N4
-    PG & RD & N4 --> REST & WS & EXP & GRAPH
+    C1 & C2 & C3 & C4 -->|Raw Unstructured Scrapes| E1
+    E4 -->|Structured Relational State| S_PG
+    E4 -->|Topological Sync & Cypher Edges| S_NEO
+    E4 -->|Publish Alert Events| S_RD
 
-    style P1 fill:#0d0d0d,stroke:#333,color:#ccc
-    style P2 fill:#111,stroke:#444,color:#ccc
-    style P3 fill:#0d0d0d,stroke:#333,color:#ccc
-    style P4 fill:#111,stroke:#444,color:#ccc
+    S_RD --> OUT_WS
+    S_PG --> OUT_ACT
+    S_NEO --> OUT_GRAPH
+    S_PG & S_NEO --> OUT_EXP
+
+    classDef p1Style fill:#1e293b,stroke:#64748b,stroke-width:1.5px,color:#f8fafc;
+    classDef p2Style fill:#0f172a,stroke:#38bdf8,stroke-width:1.5px,color:#f8fafc;
+    classDef p3Style fill:#09090b,stroke:#10b981,stroke-width:1.5px,color:#f8fafc;
+    classDef p4Style fill:#18181b,stroke:#f59e0b,stroke-width:1.5px,color:#f8fafc;
+
+    class C1,C2,C3,C4,SCHED p1Style;
+    class E1,E2,E3,E4 p2Style;
+    class S_PG,S_NEO,S_RD p3Style;
+    class OUT_WS,OUT_ACT,OUT_GRAPH,OUT_EXP p4Style;
 ```
 
 ### Entity Types Extracted
 
 ```mermaid
-mindmap
-  root((Entity\nExtraction))
-    Crypto
-      BTC addresses
-      ETH addresses
-      Wallet clusters
-    Network
-      .onion URLs
-      IP addresses
-      Domains
-    Identity
-      Handles / usernames
-      Email addresses
-      PGP fingerprints
-    Infrastructure
-      TLS certificates
-      Server banners
-      Favicon hashes
+flowchart LR
+    ROOT(["Ψ <b>NETRA ENTITY RECONNAISSANCE</b>"])
+
+    subgraph CRYPTO["Cryptocurrency Intelligence"]
+        direction TB
+        CAT1["💰 <b>Crypto Assets</b>"]
+        CR1["BTC & ETH Addresses<br/><code>Base58Check / bech32 / Hex</code>"]
+        CR2["Transaction Hashes<br/><code>UTXO & Internal Transfers</code>"]
+        CR3["Wallet Clusters<br/><code>Common-input-ownership</code>"]
+        CAT1 --> CR1 & CR2 & CR3
+    end
+
+    subgraph NETWORK["Network & Darknet Infrastructure"]
+        direction TB
+        CAT2["🌐 <b>Dark Infrastructure</b>"]
+        NW1[".onion Hidden Services<br/><code>v3 Ed25519 addresses</code>"]
+        NW2["IP Addresses & Ports<br/><code>IPv4 / IPv6 C2 nodes</code>"]
+        NW3["Domains & Subdomains<br/><code>Clearweb mirrors & gates</code>"]
+        NW4["BGP ASNs & Relays<br/><code>Guard / Exit flags & bandwidth</code>"]
+        CAT2 --> NW1 & NW2 & NW3 & NW4
+    end
+
+    subgraph IDENTITY["Persona & Operator Identity"]
+        direction TB
+        CAT3["👤 <b>Actor Identities</b>"]
+        ID1["Forum Handles & Aliases<br/><code>Cross-platform handles</code>"]
+        ID2["Communication Channels<br/><code>Telegram, Tox, Jabber</code>"]
+        ID3["PGP Fingerprints<br/><code>Public key IDs & subkeys</code>"]
+        CAT3 --> ID1 & ID2 & ID3
+    end
+
+    subgraph FORENSICS["Digital Signatures & Artefacts"]
+        direction TB
+        CAT4["🛡️ <b>Forensic Signals</b>"]
+        FO1["TLS / SSL Certificates<br/><code>SHA-256 cert fingerprints</code>"]
+        FO2["Server Banners & Headers<br/><code>HTTP server response signatures</code>"]
+        FO3["Favicon MMH3 Hashes<br/><code>Murmur3 icon hash correlations</code>"]
+        FO4["SSH Host Keys<br/><code>RSA / Ed25519 fingerprints</code>"]
+        CAT4 --> FO1 & FO2 & FO3 & FO4
+    end
+
+    ROOT --> CAT1 & CAT2 & CAT3 & CAT4
+
+    classDef rootStyle fill:#000000,stroke:#f8fafc,stroke-width:2px,color:#f8fafc;
+    classDef catStyle fill:#1e293b,stroke:#94a3b8,stroke-width:1.5px,color:#f8fafc;
+    classDef cryptoStyle fill:#1a1505,stroke:#f59e0b,stroke-width:1.5px,color:#fef3c7;
+    classDef netStyle fill:#031525,stroke:#0ea5e9,stroke-width:1.5px,color:#e0f2fe;
+    classDef idStyle fill:#061a12,stroke:#10b981,stroke-width:1.5px,color:#d1fae5;
+    classDef forStyle fill:#160b24,stroke:#a855f7,stroke-width:1.5px,color:#f3e8ff;
+
+    class ROOT rootStyle;
+    class CAT1,CAT2,CAT3,CAT4 catStyle;
+    class CR1,CR2,CR3 cryptoStyle;
+    class NW1,NW2,NW3,NW4 netStyle;
+    class ID1,ID2,ID3 idStyle;
+    class FO1,FO2,FO3,FO4 forStyle;
 ```
 
 ---
@@ -459,28 +553,56 @@ All adapters are zero-cost, requiring no API keys or paid subscriptions.
 ### User Journey
 
 ```mermaid
-graph LR
-    LOGIN["/login"] --> DASH["/dashboard"]
-    DASH --> ACTORS["/actors"]
-    DASH --> GRAPH["/graph"]
-    DASH --> ALERTS["/alerts"]
-    DASH --> PIPE["/pipeline"]
-    DASH --> SEARCH["/search"]
-    ACTORS --> DOSSIER["/actors/[id]"]
-    DOSSIER --> GRAPH
-    PIPE -->|Blockchain Lookup| ACTORS
-    PIPE -->|Onion Probe| ACTORS
-    ALERTS -->|Triage| DOSSIER
-    SEARCH --> DOSSIER
+flowchart LR
+    subgraph S1["01 · AUTH & ACCESS"]
+        L1["<b>/login</b><br/>Analyst Authentication<br/><i>JWT Session & RBAC Enforcement</i>"]
+    end
 
-    style LOGIN fill:#1a1a1a,stroke:#555,color:#fff
-    style DASH fill:#111,stroke:#fff,color:#fff
-    style ACTORS fill:#1a1a1a,stroke:#555,color:#ccc
-    style DOSSIER fill:#1a1a1a,stroke:#555,color:#ccc
-    style GRAPH fill:#1a1a1a,stroke:#555,color:#ccc
-    style ALERTS fill:#1a1a1a,stroke:#555,color:#ccc
-    style PIPE fill:#1a1a1a,stroke:#555,color:#ccc
-    style SEARCH fill:#1a1a1a,stroke:#555,color:#ccc
+    subgraph S2["02 · SITUATIONAL AWARENESS"]
+        L2["<b>/dashboard</b><br/>SOC Operations Center<br/><i>KPIs • Live Feeds • Node Health</i>"]
+        L3["<b>/alerts</b><br/>Threat Alert Inbox<br/><i>Severity Triage & Escalation</i>"]
+    end
+
+    subgraph S3["03 · INVESTIGATION & RECON"]
+        L4["<b>/search</b><br/>Entity Search<br/><i>Full-Text & Wildcard Match</i>"]
+        L5["<b>/pipeline</b><br/>Reconnaissance Suite<br/><i>Blockchain • Onion Probe • Ahmia</i>"]
+    end
+
+    subgraph S4["04 · DOSSIER & GRAPH ANALYSIS"]
+        L6["<b>/actors</b><br/>Threat Actor Registry<br/><i>Filters • Status • Scoring</i>"]
+        L7["<b>/actors/[id]</b><br/>Full Actor Dossier<br/><i>Entities • Timeline • Links • Evidence</i>"]
+        L8["<b>/graph</b><br/>Cytoscape Explorer<br/><i>Interactive Topology Traversals</i>"]
+    end
+
+    subgraph S5["05 · ACTION & EVIDENCE"]
+        L9["<b>Court-Ready Export</b><br/>Evidence Package<br/><i>IT Act §65B Certified PDF/CSV/JSON</i>"]
+    end
+
+    L1 --> L2
+    L2 --> L3
+    L2 --> L4
+    L2 --> L5
+    L2 --> L6
+
+    L3 -->|Triage Incident| L7
+    L4 -->|Target Identified| L7
+    L5 -->|Enrich Intelligence| L7
+    L6 -->|Select Threat Actor| L7
+
+    L7 <-->|Explore Ego Network| L8
+    L7 -->|Export Legal Package| L9
+
+    classDef s1 fill:#09090b,stroke:#64748b,stroke-width:1.5px,color:#f8fafc;
+    classDef s2 fill:#0f172a,stroke:#38bdf8,stroke-width:1.5px,color:#f8fafc;
+    classDef s3 fill:#18181b,stroke:#818cf8,stroke-width:1.5px,color:#f8fafc;
+    classDef s4 fill:#09090b,stroke:#10b981,stroke-width:1.5px,color:#f8fafc;
+    classDef s5 fill:#1a1505,stroke:#f59e0b,stroke-width:2px,color:#f8fafc;
+
+    class L1 s1;
+    class L2,L3 s2;
+    class L4,L5 s3;
+    class L6,L7,L8 s4;
+    class L9 s5;
 ```
 
 ---
@@ -491,125 +613,181 @@ graph LR
 
 ```mermaid
 erDiagram
-    ACTORS {
-        string actor_id PK
-        string label
-        string category
-        string status
-        datetime first_seen
-        datetime last_seen
-        datetime last_scan_at
-    }
-    ENTITIES {
-        string entity_id PK
-        string kind
-        string value
-        float confidence
-        datetime first_seen
-        datetime last_seen
-    }
-    ACTOR_ENTITIES {
-        string actor_id FK
-        string entity_id FK
-    }
-    PERSONA_LINKS {
-        string link_id PK
-        string actor_a FK
-        string actor_b FK
-        float score
-        string band
-        string analyst_status
-    }
-    LINK_EVIDENCE {
-        int id PK
-        string link_id FK
-        string evidence_type
-        float llr
-        string raw_value
-    }
-    AUDIT_LOG {
-        int id PK
-        string actor
-        string action
-        string target
-        datetime at
-        json detail
-    }
+    USERS ||--o{ AUDIT_LOG : "triggers"
+    USERS ||--o{ ACTORS : "supervises"
+    ACTORS ||--o{ ACTOR_ENTITIES : "owns"
+    ENTITIES ||--o{ ACTOR_ENTITIES : "linked_to"
+    ACTORS ||--o{ PERSONA_LINKS : "primary_actor"
+    ACTORS ||--o{ PERSONA_LINKS : "target_actor"
+    PERSONA_LINKS ||--|{ LINK_EVIDENCE : "substantiated_by"
+
     USERS {
-        string user_id PK
-        string email
-        string hashed_pw
-        string role
+        string user_id PK "UUID"
+        string username UK "Alphanumeric handle"
+        string hashed_password "bcrypt hash"
+        string role "admin | analyst | viewer"
+        boolean is_active "Account status flag"
+        datetime last_login "Last authentication timestamp"
     }
 
-    ACTORS ||--o{ ACTOR_ENTITIES : has
-    ENTITIES ||--o{ ACTOR_ENTITIES : belongs_to
-    ACTORS ||--o{ PERSONA_LINKS : linked_as_A
-    ACTORS ||--o{ PERSONA_LINKS : linked_as_B
-    PERSONA_LINKS ||--o{ LINK_EVIDENCE : supported_by
+    ACTORS {
+        string actor_id PK "UUID"
+        string label "Display name / group"
+        string category "ransomware | market | forum"
+        string status "active | dormant | seized"
+        float threat_score "Dynamic score (0–100)"
+        datetime first_seen "First detection timestamp"
+        datetime last_seen "Latest telemetry timestamp"
+        datetime last_scan_at "Recent crawl timestamp"
+    }
+
+    ENTITIES {
+        string entity_id PK "UUID"
+        string kind "wallet | onion | ip | email | handle"
+        string value "Normalized entity string"
+        float confidence "Extraction certainty (0.0-1.0)"
+        string source_provenance "Source reliability rating (A–E)"
+        datetime first_seen "Discovery timestamp"
+        datetime last_seen "Telemetry timestamp"
+    }
+
+    ACTOR_ENTITIES {
+        string actor_id FK "References ACTORS"
+        string entity_id FK "References ENTITIES"
+        string association_type "operator | infra | financial"
+        datetime linked_at "Creation timestamp"
+    }
+
+    PERSONA_LINKS {
+        string link_id PK "UUID"
+        string actor_a FK "References primary ACTORS"
+        string actor_b FK "References target ACTORS"
+        float score "Composite Bayesian score"
+        string band "Confidence band (A to E)"
+        string analyst_status "pending | confirmed | rejected"
+        datetime computed_at "Calculation timestamp"
+    }
+
+    LINK_EVIDENCE {
+        int id PK "Serial identifier"
+        string link_id FK "References PERSONA_LINKS"
+        string evidence_type "pgp | wallet | favicon | handle"
+        float llr "Log-Likelihood Ratio value"
+        string raw_value "Supporting proof snippet"
+        string notes "Investigator notes"
+    }
+
+    AUDIT_LOG {
+        int id PK "Serial identifier"
+        string user_id FK "References USERS"
+        string action "LOGIN | EXPORT | TRIAGE | EDIT"
+        string target "Accessed resource identifier"
+        datetime timestamp "IT Act Section 65B timestamp"
+        json detail "Contextual payload metadata"
+        string integrity_hash "SHA-256 chain verification hash"
+    }
 ```
 
 ### Neo4j Graph Schema
 
 ```mermaid
-graph LR
-    A1((Actor)) -->|USES| E1["btc_address"]
-    A1 -->|USES| E2["onion_url"]
-    A1 -->|USES| E3["pgp_fingerprint"]
-    A1 -->|USES| E4["handle"]
-    A1 -->|USES| E5["email"]
-    A1 -->|USES| E6["ip_address"]
-    A1 -->|USES| E7["eth_address"]
+flowchart LR
+    A1["👤 <b>:Actor</b><br/>name: 'LockBit 3.0'<br/>status: 'active'<br/>score: 94.2"]
+    A2["👤 <b>:Actor</b><br/>name: 'DarkBitz'<br/>status: 'dormant'<br/>score: 72.0"]
 
-    A1 ---|"LINKED_TO\nscore: 87.4\nband: A"| A2((Actor))
+    P1["🪪 <b>:Persona</b><br/>handle: 'lockbit_supp'<br/>platform: 'Tox/XMPP'"]
+    W1["💰 <b>:CryptoWallet</b><br/>addr: 'bc1q9...83j'<br/>chain: 'BTC'<br/>balance: 14.82 BTC"]
+    W2["💰 <b>:CryptoWallet</b><br/>addr: '1P5Z...9z8'<br/>chain: 'BTC'<br/>cluster: 'Laundering'"]
 
-    E1 -->|TRANSFERS_TO| E8["btc_address"]
-    E6 -->|HOSTS| E2
-    E9["domain"] -->|RESOLVES_TO| E6
+    O1["🧅 <b>:DarkwebSite</b><br/>onion: 'lockbit7...onion'<br/>title: 'LockBit Blog'<br/>status: 'online'"]
+    I1["🖥️ <b>:Infrastructure</b><br/>ip: '185.220.101.5'<br/>asn: 'AS208323'<br/>country: 'DE'"]
+    C1["📜 <b>:TLSCertificate</b><br/>fingerprint: 'a7c9...1f'<br/>san: 'leak-service.org'"]
 
-    style A1 fill:#1a1a1a,stroke:#fff,color:#fff
-    style A2 fill:#1a1a1a,stroke:#fff,color:#fff
-    style E1 fill:#f7931a,stroke:#333,color:#000
-    style E7 fill:#627eea,stroke:#333,color:#fff
-    style E2 fill:#7D4698,stroke:#333,color:#fff
-    style E3 fill:#2ecc71,stroke:#333,color:#000
+    A1 -->|OPERATES| P1
+    A1 -->|CONTROLS| W1
+    A1 -->|HOSTS| O1
+
+    W1 -->|TRANSFERS_TO<br/><i>tx: 5.2 BTC</i>| W2
+    O1 -->|HOSTED_ON| I1
+    I1 -->|SERVES_CERT| C1
+
+    A1 <==|REBRANDED_TO<br/><b>Bayesian Score: 87.4 (Band A)</b><br/><i>LLR: +4.8 (PGP & Wallet Match)</i>|==> A2
+
+    classDef actorStyle fill:#09090b,stroke:#f43f5e,stroke-width:2px,color:#f8fafc;
+    classDef personaStyle fill:#061a12,stroke:#10b981,stroke-width:1.5px,color:#d1fae5;
+    classDef cryptoStyle fill:#1a1505,stroke:#f59e0b,stroke-width:1.5px,color:#fef3c7;
+    classDef onionStyle fill:#160b24,stroke:#a855f7,stroke-width:1.5px,color:#f3e8ff;
+    classDef infraStyle fill:#031525,stroke:#0ea5e9,stroke-width:1.5px,color:#e0f2fe;
+
+    class A1,A2 actorStyle;
+    class P1 personaStyle;
+    class W1,W2 cryptoStyle;
+    class O1 onionStyle;
+    class I1,C1 infraStyle;
 ```
 
 ### Persona Link Scoring (Bayesian LLR)
 
 ```mermaid
-graph LR
-    subgraph Evidence["Evidence Types"]
-        direction TB
-        VH1["PGP Fingerprint"] ---|Very High| S
-        VH2["SSH Key"] ---|Very High| S
-        H1["Wallet Cluster"] ---|High| S
-        H2["Wallet Transfer"] ---|High| S
-        H3["Cert SAN"] ---|High| S
-        M1["Favicon Hash"] ---|Medium| S
-        M2["Handle Exact"] ---|Medium| S
-        L1["Handle Similar"] ---|Low| S
-        L2["Stylometry"] ---|Low| S
-        L3["Temporal Overlap"] ---|Low| S
+flowchart TD
+    subgraph EVIDENCE["CORRELATED EVIDENCE INPUTS"]
+        direction LR
+        subgraph T1["Tier 1: Cryptographic Determinism"]
+            E1["🔑 <b>PGP Fingerprint Match</b><br/><code>LLR = +5.0</code>"]
+            E2["🗝️ <b>SSH Host Key Match</b><br/><code>LLR = +4.5</code>"]
+            E3["⛓️ <b>Multi-Sig Wallet Co-spend</b><br/><code>LLR = +4.0</code>"]
+        end
+
+        subgraph T2["Tier 2: Infrastructure & Financial"]
+            E4["💰 <b>Direct Wallet Transfer</b><br/><code>LLR = +2.8</code>"]
+            E5["🧅 <b>Colocated Onion / TLS SAN</b><br/><code>LLR = +2.5</code>"]
+            E6["🖼️ <b>Murmur3 Favicon Hash</b><br/><code>LLR = +2.0</code>"]
+        end
+
+        subgraph T3["Tier 3: Behavioral & Heuristics"]
+            E7["👤 <b>Exact Handle Match</b><br/><code>LLR = +1.5</code>"]
+            E8["📝 <b>Stylometry Vocabulary Match</b><br/><code>LLR = +1.0</code>"]
+            E9["⏰ <b>Temporal Activity Overlap</b><br/><code>LLR = +0.6</code>"]
+        end
     end
 
-    S["Bayesian LLR\nScoring Engine"] --> B
-
-    subgraph Bands["Confidence Bands"]
-        B["Score"] --> BA["A: 80+"]
-        B --> BB["B: 60-79"]
-        B --> BC["C: 40-59"]
-        B --> BD["D: 20-39"]
-        B --> BE["E: below 20"]
+    subgraph ENGINE["BAYESIAN EVIDENCE ACCUMULATION ENGINE"]
+        CALC["<b>Log-Likelihood Ratio Accumulator</b><br/><code>LLR_total = ∑ LLR_i</code><br/><code>Posterior Probability = 1 / (1 + e^(-LLR_total))</code>"]
     end
 
-    style Evidence fill:#0d0d0d,stroke:#333,color:#ccc
-    style Bands fill:#111,stroke:#444,color:#ccc
-    style BA fill:#2ecc71,stroke:#333,color:#000
-    style BB fill:#3498db,stroke:#333,color:#fff
-    style BC fill:#f39c12,stroke:#333,color:#000
-    style BD fill:#e74c3c,stroke:#333,color:#fff
-    style BE fill:#555,stroke:#333,color:#fff
+    subgraph BANDS["CONFIDENCE BANDS & OPERATIONAL ACTION"]
+        direction LR
+        B_A["🟢 <b>BAND A (Score 80–100)</b><br/><b>Verified Attribution</b><br/>• Automated entity linkage<br/>• High-priority LE alert"]
+        B_B["🔵 <b>BAND B (Score 60–79)</b><br/><b>High Probability Link</b><br/>• Flagged for Analyst Confirmation<br/>• Corroboration scheduled"]
+        B_C["🟡 <b>BAND C (Score 40–59)</b><br/><b>Moderate Lead</b><br/>• Displayed in exploratory graph<br/>• Awaiting further data"]
+        B_DE["⚪ <b>BAND D/E (Score < 40)</b><br/><b>Low / Speculative</b><br/>• Suppressed from public dossiers<br/>• Stored for historical indexing"]
+    end
+
+    E1 & E2 & E3 -->|Tier 1: High LLR| CALC
+    E4 & E5 & E6 -->|Tier 2: Medium LLR| CALC
+    E7 & E8 & E9 -->|Tier 3: Heuristic LLR| CALC
+    CALC --> B_A
+    CALC --> B_B
+    CALC --> B_C
+    CALC --> B_DE
+
+    classDef t1Style fill:#09090b,stroke:#f43f5e,stroke-width:1.5px,color:#f8fafc;
+    classDef t2Style fill:#1a1505,stroke:#f59e0b,stroke-width:1.5px,color:#fef3c7;
+    classDef t3Style fill:#031525,stroke:#0ea5e9,stroke-width:1.5px,color:#e0f2fe;
+    classDef calcStyle fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef bandA fill:#061a12,stroke:#10b981,stroke-width:2px,color:#d1fae5;
+    classDef bandB fill:#031525,stroke:#3b82f6,stroke-width:1.5px,color:#dbeafe;
+    classDef bandC fill:#1a1505,stroke:#f59e0b,stroke-width:1.5px,color:#fef3c7;
+    classDef bandDE fill:#18181b,stroke:#71717a,stroke-width:1px,color:#a1a1aa;
+
+    class E1,E2,E3 t1Style;
+    class E4,E5,E6 t2Style;
+    class E7,E8,E9 t3Style;
+    class CALC calcStyle;
+    class B_A bandA;
+    class B_B bandB;
+    class B_C bandC;
+    class B_DE bandDE;
 ```
 
 ---
@@ -620,68 +798,104 @@ graph LR
 
 ```mermaid
 sequenceDiagram
-    participant U as Analyst
-    participant FE as Next.js Frontend
-    participant API as FastAPI Backend
-    participant DB as PostgreSQL
-    participant R as Redis
+    autonumber
+    actor Analyst as 👮 Investigator / Analyst
+    box rgba(30, 41, 59, 0.5) Client Presentation Tier
+        participant FE as 💻 Next.js Frontend
+    end
+    box rgba(15, 23, 42, 0.7) Security Gateway Tier
+        participant API as ⚡ FastAPI Gateway
+    end
+    box rgba(9, 9, 11, 0.9) Storage & Message Tier
+        participant DB as 🐘 PostgreSQL 16
+        participant RD as ⚡ Redis 7
+    end
 
-    U->>FE: Login (email + password)
+    Note over Analyst,FE: Step 1: Authentication & Token Issuance
+    Analyst->>FE: Enter Credentials (username, password)
     FE->>API: POST /api/v1/auth/login
-    API->>DB: Verify credentials (bcrypt)
-    DB-->>API: User record
-    API->>API: Generate JWT (python-jose)
-    API->>DB: Write audit_log (LOGIN)
-    API-->>FE: { access_token, expires_in }
-    FE->>FE: Store token (sessionStorage)
+    API->>API: Rate Limit Check (SlowAPI: 60 req/min)
+    API->>DB: Query User Record (SELECT * FROM users WHERE username = ?)
+    DB-->>API: User Record + Salted bcrypt Hash
+    API->>API: Verify Password Hash (bcrypt.verify)
+    API->>API: Generate Dual JWT Tokens (HS256 with 64-char key)
+    API->>DB: INSERT into audit_log (action='LOGIN', status='SUCCESS')
+    API-->>FE: HTTP 200 { access_token, refresh_token, role }
+    FE->>FE: Store Token in Protected Session Storage
 
-    U->>FE: Request /dashboard
-    FE->>API: GET /api/v1/health (Authorization: Bearer)
-    API->>API: Validate JWT + check role
-    API->>R: Rate limit check (SlowAPI)
-    R-->>API: OK
-    API-->>FE: 200 + data
-    FE-->>U: Render dashboard
+    Note over Analyst,FE: Step 2: Authenticated Intelligence Access
+    Analyst->>FE: Navigate to Actor Dossier (/actors/149)
+    FE->>API: GET /api/v1/actors/149 (Authorization: Bearer <JWT>)
+    API->>API: Validate Token Signature & Expiry
+    API->>API: Enforce Role-Based Access Control (RBAC: 'analyst')
+    API->>RD: Check Query Cache (Key: actor:149)
+    alt Cache Miss
+        API->>DB: Fetch Actor Profile, Corroborated Entities & Evidence
+        DB-->>API: Return Relational Entity Records
+        API->>RD: Populate Cache (TTL 120s)
+    else Cache Hit
+        RD-->>API: Return Cached Intelligence
+    end
+    API->>DB: INSERT into audit_log (action='VIEW_DOSSIER', target='149')
+    API-->>FE: HTTP 200 { actor_dossier_payload }
+    FE-->>Analyst: Render Interactive Dossier & Graph View
 ```
 
 ### OWASP Top 10 Coverage
 
 | OWASP ID | Threat | NETRA Mitigation |
 |:---------|:-------|:-----------------|
-| A01 | Broken Access Control | RBAC with JWT, role-based route guards |
-| A02 | Cryptographic Failures | bcrypt password hashing, JOSE/JWE tokens |
-| A03 | Injection | SQLAlchemy ORM (parameterized), Pydantic validation |
-| A04 | Insecure Design | Threat-modeled architecture, principle of least privilege |
-| A05 | Security Misconfiguration | Docker security_opt, no-new-privileges |
-| A07 | Auth Failures | Rate limiting (SlowAPI), account lockout |
-| A09 | Logging & Monitoring | Immutable audit_log table, structured logging |
+| A01 | Broken Access Control | Strict RBAC with JWT token scopes, role-based API route guards |
+| A02 | Cryptographic Failures | Salted bcrypt password hashing, JOSE/JWE encrypted token exchange |
+| A03 | Injection | SQLAlchemy ORM parameterized queries, Pydantic strict payload validation |
+| A04 | Insecure Design | Threat-modeled architecture, principle of least privilege across services |
+| A05 | Security Misconfiguration | Docker `security_opt: [no-new-privileges:true]`, read-only filesystems |
+| A07 | Auth Failures | Brute-force lockout (5 attempts / 30m), SlowAPI IP rate limiting |
+| A09 | Logging & Monitoring | Immutable SHA-256 chained audit_log table, structured JSON logging |
 
-### Legal Compliance
+### Legal & Regulatory Compliance
 
 ```mermaid
-graph LR
-    subgraph Indian["Indian Law"]
-        IT["IT Act 2000\nSections 66, 69, 79"]
-        IT65["IT Act Section 65B\nDigital Evidence"]
-        CERT["CERT-In Directions 2022\n6-hour Reporting"]
-        NCIIPC_["NCIIPC Guidelines\nCritical Infra"]
-        RBI["RBI Cyber Framework\nBanking Sector"]
-        MHA["MHA I4C Scheme\nCybercrime Coord."]
+flowchart TD
+    subgraph MANDATES["🏛️ INDIAN STATUTORY & REGULATORY MANDATES"]
+        direction LR
+        M1["📜 <b>IT Act, 2000</b><br/>• Section 66 (Cyber Offenses)<br/>• Section 69 (Lawful Interception)<br/>• Section 79 (Intermediary Due Diligence)"]
+        M2["⚖️ <b>IT Act Section 65B</b><br/>• Admissibility of Electronic Records<br/>• Certified SHA-256 Hash Evidence<br/>• Tamper-Evident Audit Timestamps"]
+        M3["🚨 <b>CERT-In Directions 2022</b><br/>• 6-Hour Mandatory Incident Reporting<br/>• Threat IOC Dissemination Formats<br/>• Strict Log Preservation Rules"]
+        M4["🛡️ <b>NCIIPC & MHA I4C</b><br/>• Critical Information Infra Protection<br/>• Cyber Crime Coordination Centre<br/>• NCRP Threat Data Interchange"]
     end
 
-    subgraph Intl["International"]
-        NIST["NIST CSF v2.0\nRisk Assessment"]
-        STIX["STIX/TAXII 2.1\nThreat Sharing"]
-        MITRE["MITRE ATT&CK\nAdversary TTPs"]
-        BUDA["Budapest Convention\nCross-border Evidence"]
+    subgraph ENGINE["Ψ NETRA AUTOMATED COMPLIANCE & GOVERNANCE CORE"]
+        direction TB
+        CORE(["Ψ <b>NETRA COMPLIANCE & PROVENANCE ENGINE</b><br/><i>Continuous Automated Verification • SHA-256 Chain of Custody • Zero Active Intrusion</i>"])
+        C_AUDIT["🔒 <b>Tamper-Evident Audit Logging</b><br/>SHA-256 chained transaction log recording every search, query, and export action"]
+        C_PASSIVE["🛡️ <b>Strict Passive Reconnaissance</b><br/>Exclusively utilizes public OSINT, Tor relays & CT logs • Zero active intrusion"]
+        C_EVIDENCE["📑 <b>Automated §65B Certificate Generation</b><br/>PDF exports embedded with cryptographic checksums, system time & officer credentials"]
+        C_REDACT["🎭 <b>PII & Privacy Boundary Guard</b><br/>Automated masking of victim PII & non-target civilian personal data"]
+
+        CORE --> C_AUDIT & C_PASSIVE & C_EVIDENCE & C_REDACT
     end
 
-    NETRA((NETRA)) --> IT & IT65 & CERT & NCIIPC_ & RBI & MHA
-    NETRA --> NIST & STIX & MITRE & BUDA
+    subgraph STANDARDS["🌐 INTERNATIONAL CYBERSECURITY & THREAT STANDARDS"]
+        direction LR
+        S1["🛡️ <b>NIST CSF v2.0</b><br/>Identify • Protect • Detect<br/>Respond • Recover"]
+        S2["🎯 <b>MITRE ATT&CK</b><br/>Adversary TTP Mapping<br/>Enterprise Cyber Matrix"]
+        S3["📦 <b>STIX / TAXII 2.1</b><br/>Automated Threat Intel<br/>Structured CTI Exchange"]
+        S4["🤝 <b>Budapest Convention</b><br/>Cross-Border Cybercrime<br/>Digital Evidence Standards"]
+    end
 
-    style Indian fill:#0d0d0d,stroke:#333,color:#ccc
-    style Intl fill:#111,stroke:#444,color:#ccc
-    style NETRA fill:#1a1a1a,stroke:#fff,color:#fff
+    M1 & M2 & M3 & M4 ==>|Mandatory Legal Directives| CORE
+    S1 & S2 & S3 & S4 ==>|Architectural Frameworks| CORE
+
+    classDef mandateStyle fill:#09090b,stroke:#f43f5e,stroke-width:1.5px,color:#f8fafc;
+    classDef coreStyle fill:#000000,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef engineStyle fill:#0f172a,stroke:#38bdf8,stroke-width:1.5px,color:#f8fafc;
+    classDef standardStyle fill:#1a1505,stroke:#f59e0b,stroke-width:1.5px,color:#fef3c7;
+
+    class M1,M2,M3,M4 mandateStyle;
+    class CORE coreStyle;
+    class C_AUDIT,C_PASSIVE,C_EVIDENCE,C_REDACT engineStyle;
+    class S1,S2,S3,S4 standardStyle;
 ```
 
 ---
@@ -697,27 +911,27 @@ graph LR
 ### One-Command Launch
 
 ```bash
-# Clone
+# Clone repository
 git clone https://github.com/Swaggyop/netra.git
 cd netra
 
-# Configure
+# Configure environment variables
 cp .env.example .env
-# Edit .env with your secrets
+# Edit .env with your environment-specific secrets
 
-# Launch all 6 services
+# Launch all 6 microservices
 make up
 
 # Run database migrations
 make migrate
 
-# Seed demo data
+# Seed database with initial registry
 make seed
 
 # Generate synthetic intelligence data
 make generate
 
-# Start frontend
+# Start frontend development server
 cd frontend && npm install && npm run dev
 ```
 
@@ -729,19 +943,26 @@ make demo    # runs: up → migrate → seed → generate → replay
 
 ### Access Points
 
-| Service | URL |
-|:--------|:----|
-| **Dashboard** | http://localhost:3000 |
-| **API Docs** | http://localhost:8000/docs |
-| **Neo4j Browser** | http://localhost:7474 |
-| **WebSocket Feed** | ws://localhost:8000/ws/feed |
+| Service | URL | Description |
+|:--------|:----|:------------|
+| **Dashboard** | http://localhost:3000 | Investigator Next.js UI |
+| **API Docs** | http://localhost:8000/docs | Interactive Swagger UI |
+| **Neo4j Browser** | http://localhost:7474 | Graph DBMS Console |
+| **WebSocket Feed** | ws://localhost:8000/ws/feed | Real-time Alert Stream |
 
-### Default Credentials
+### Initial Access & Authentication Setup
 
-```
-Username: admin@netra.local
-Password: netra_admin_2024
-```
+> [!IMPORTANT]
+> **Zero Default Passwords Policy (OWASP A07 / CERT-In Compliance)**:
+> In accordance with Indian cybersecurity guidelines and secure development best practices, NETRA **does not ship with hardcoded credentials** in version control.
+>
+> 1. Initial administrator access is provisioned during the seed phase:
+>    ```bash
+>    make seed
+>    ```
+> 2. The seed script provisions an initial admin account and outputs development access credentials to the secure console.
+> 3. For staging or production deployments, specify custom administrator credentials directly in your uncommitted `.env` file before initial boot.
+> 4. **Mandatory Security Requirement**: Change default development passwords immediately upon first login via the user management profile.
 
 ---
 
@@ -751,20 +972,20 @@ Password: netra_admin_2024
 # ── Application ──────────────────────────────
 APP_NAME=netra
 APP_ENV=development          # development | staging | production
-SECRET_KEY=<random-64-chars>
+SECRET_KEY=<random-64-character-secret>
 ALLOWED_HOSTS=localhost,127.0.0.1
 
 # ── PostgreSQL ───────────────────────────────
 POSTGRES_HOST=postgres
-POSTGRES_PORT=5432
+POSTGRES_PORT=5432           # Internal Docker network port (mapped to 5433 on host)
 POSTGRES_DB=netra
 POSTGRES_USER=netra
-POSTGRES_PASSWORD=<your-password>
+POSTGRES_PASSWORD=<strong-database-password>
 
 # ── Neo4j ────────────────────────────────────
 NEO4J_URI=bolt://neo4j:7687
 NEO4J_USER=neo4j
-NEO4J_PASSWORD=<your-password>
+NEO4J_PASSWORD=<strong-graph-password>
 
 # ── Redis ────────────────────────────────────
 REDIS_URL=redis://redis:6379/0
@@ -773,10 +994,10 @@ CELERY_RESULT_BACKEND=redis://redis:6379/2
 
 # ── MinIO (Object Storage) ───────────────────
 MINIO_ENDPOINT=minio:9000
-MINIO_ACCESS_KEY=netra
-MINIO_SECRET_KEY=<your-password>
+MINIO_ACCESS_KEY=<minio-access-key>
+MINIO_SECRET_KEY=<minio-secret-key>
 
-# ── Tor (Optional) ──────────────────────────
+# ── Tor (Optional SOCKS5) ────────────────────
 TOR_SOCKS_PROXY=socks5://tor:9050
 TOR_CONTROL_PORT=9051
 ```
