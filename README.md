@@ -113,123 +113,149 @@ India faces an escalating dark web threat landscape:
 
 ## `02` Architecture
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                         NETRA ARCHITECTURE                          │
-├──────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐  │
-│  │ Tor     │  │Ransomware│  │Blockchain│  │ OSINT   │  │ Cert    │  │
-│  │ Network │  │ Trackers │  │ Explorers│  │ Feeds   │  │ Transp. │  │
-│  └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘  │
-│       │            │            │            │            │         │
-│       └────────────┴─────┬──────┴────────────┴────────────┘         │
-│                          │                                           │
-│                 ┌────────▼────────┐                                  │
-│                 │  22 ADAPTERS    │  ◄── Celery Workers              │
-│                 │  (Collection)   │      Async Task Queue            │
-│                 └────────┬────────┘                                  │
-│                          │                                           │
-│              ┌───────────┼───────────┐                               │
-│              │           │           │                               │
-│     ┌────────▼──┐  ┌─────▼─────┐  ┌─▼──────────┐                   │
-│     │PostgreSQL │  │   Redis   │  │   Neo4j    │                    │
-│     │ Structured│  │ Real-time │  │   Graph    │                    │
-│     │  Records  │  │  Events   │  │ Relations  │                    │
-│     └────────┬──┘  └─────┬─────┘  └─┬──────────┘                   │
-│              │           │          │                                │
-│              └───────────┼──────────┘                                │
-│                          │                                           │
-│                 ┌────────▼────────┐                                  │
-│                 │   FastAPI       │  ◄── REST + WebSocket            │
-│                 │   Backend       │      JWT Auth, RBAC              │
-│                 └────────┬────────┘                                  │
-│                          │                                           │
-│                 ┌────────▼────────┐                                  │
-│                 │   Next.js 16    │  ◄── React 19, Cytoscape.js     │
-│                 │   Dashboard     │      Real-time Graph Explorer    │
-│                 └─────────────────┘                                  │
-│                                                                      │
-└──────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph Sources["DATA SOURCES"]
+        direction LR
+        S1["Tor Network"]
+        S2["Ransomware Trackers"]
+        S3["Blockchain Explorers"]
+        S4["OSINT Feeds"]
+        S5["Cert Transparency"]
+    end
+
+    subgraph Collection["COLLECTION LAYER"]
+        CW["Celery Workers\n22 Adapters"]
+        CB["Celery Beat\nScheduler"]
+    end
+
+    subgraph Storage["STORAGE LAYER"]
+        direction LR
+        PG[("PostgreSQL 16\nActors, Entities\nAudit Logs")]
+        RD[("Redis 7\nReal-time Events\nTask Broker")]
+        N4[("Neo4j 5\nKnowledge Graph\nRelationships")]
+    end
+
+    subgraph Backend["APPLICATION LAYER"]
+        API["FastAPI Backend\nREST + WebSocket\nJWT Auth, RBAC"]
+    end
+
+    subgraph Frontend["PRESENTATION LAYER"]
+        UI["Next.js 16 Dashboard\nReact 19 + Cytoscape.js\nReal-time Graph Explorer"]
+    end
+
+    S1 & S2 & S3 & S4 & S5 --> CW
+    CB -.->|schedule| CW
+    CW --> PG & RD & N4
+    PG & RD & N4 --> API
+    API --> UI
+    API -.->|WebSocket| UI
+
+    style Sources fill:#1a1a1a,stroke:#333,color:#fff
+    style Collection fill:#111,stroke:#444,color:#fff
+    style Storage fill:#0d0d0d,stroke:#333,color:#fff
+    style Backend fill:#111,stroke:#444,color:#fff
+    style Frontend fill:#1a1a1a,stroke:#333,color:#fff
 ```
 
-### Docker Services (6 containers)
+### Docker Service Topology
 
-| Service | Image | Port | Role |
-|:--------|:------|:-----|:-----|
-| `postgres` | `postgres:16-alpine` | 5433 | Structured data — actors, entities, audit logs |
-| `neo4j` | `neo4j:5-community` | 7474, 7687 | Knowledge graph — relationships & traversals |
-| `redis` | `redis:7-alpine` | 6379 | Celery broker, real-time event cache, WebSocket pub/sub |
-| `api` | FastAPI (uvicorn) | 8000 | REST API, WebSocket, auth, exports |
-| `worker` | Celery worker | — | Async collection tasks, data processing |
-| `frontend` | Next.js 16 | 3000 | Dashboard, graph explorer, pipeline controls |
+```mermaid
+graph LR
+    subgraph Docker["docker-compose.yml"]
+        PG["postgres:16-alpine\n:5433"]
+        N4["neo4j:5-community\n:7474 :7687"]
+        RD["redis:7-alpine\n:6379"]
+        API["api / uvicorn\n:8000"]
+        WK["worker / celery"]
+        FE["frontend / next.js\n:3000"]
+    end
+
+    API --> PG & N4 & RD
+    WK --> PG & N4 & RD
+    FE -->|HTTP + WS| API
+    WK -.->|broker| RD
+
+    style Docker fill:#0a0a0a,stroke:#333,color:#ccc
+    style PG fill:#336791,stroke:#fff,color:#fff
+    style N4 fill:#008CC1,stroke:#fff,color:#fff
+    style RD fill:#DC382D,stroke:#fff,color:#fff
+    style API fill:#009688,stroke:#fff,color:#fff
+    style WK fill:#6a1b9a,stroke:#fff,color:#fff
+    style FE fill:#000,stroke:#fff,color:#fff
+```
 
 ---
 
 ## `03` Data Flow Pipeline
 
+```mermaid
+flowchart TD
+    subgraph P1["PHASE 1: COLLECTION"]
+        BEAT["Celery Beat\nScheduler"] -->|dispatch| WORKER["Celery Workers"]
+        WORKER --> A1["ransomware_tracker.py\nRansomWatch, RansomLook"]
+        WORKER --> A2["abuse_ch.py\nFeodo, URLhaus, ThreatFox"]
+        WORKER --> A3["tor_network.py\nOnionoo relays/bridges"]
+        WORKER --> A4["onion_probe.py\n.onion reachability + TLS"]
+        WORKER --> A5["onion_crawler.py\nAhmia BFS crawler"]
+        WORKER --> A6["blockchain.py\nMempool, Blockchain.com"]
+        WORKER --> A7["cert_transparency.py\ncrt.sh, CertStream"]
+        WORKER --> A8["osint_feeds.py\nOTX, PhishTank"]
+        WORKER --> A9["detection_rules.py\nSigma, CISA KEV"]
+        WORKER --> A10["supplementary.py\nDShield, GreyNoise"]
+    end
+
+    subgraph P2["PHASE 2: PROCESSING"]
+        NER["Entity Extraction\nspaCy NER"] --> DEDUP["Deduplication\nmmh3 hashing"]
+        DEDUP --> SCORE["Severity Scoring\n0-100 scale"]
+        SCORE --> LINK["Persona Linking\nBayesian LLR"]
+    end
+
+    subgraph P3["PHASE 3: STORAGE"]
+        direction LR
+        PG[("PostgreSQL\nActors, Entities\nPersonaLinks, Audit")]
+        RD[("Redis\nEvents, Runs\nPub/Sub")]
+        N4[("Neo4j\nGraph Nodes\nEdges")]
+    end
+
+    subgraph P4["PHASE 4: DELIVERY"]
+        REST["REST API\n/actors /search /alerts"]
+        WS["WebSocket\nws://feed"]
+        EXP["Exports\nPDF / CSV / JSON"]
+        GRAPH["Graph API\nCytoscape data"]
+    end
+
+    A1 & A2 & A3 & A4 & A5 & A6 & A7 & A8 & A9 & A10 --> NER
+    LINK --> PG & RD & N4
+    PG & RD & N4 --> REST & WS & EXP & GRAPH
+
+    style P1 fill:#0d0d0d,stroke:#333,color:#ccc
+    style P2 fill:#111,stroke:#444,color:#ccc
+    style P3 fill:#0d0d0d,stroke:#333,color:#ccc
+    style P4 fill:#111,stroke:#444,color:#ccc
 ```
- ┌──────────────────────────────────────────────────────────────────┐
- │                    NETRA DATA FLOW PIPELINE                     │
- └──────────────────────────────────────────────────────────────────┘
 
- PHASE 1: COLLECTION
- ───────────────────
-   Celery Beat (scheduler)
-       │
-       ▼
-   Celery Worker dispatches adapter tasks
-       │
-       ├── ransomware_tracker.py  ──► RansomWatch, RansomLook APIs
-       ├── abuse_ch.py            ──► Feodo Tracker, URLhaus, ThreatFox
-       ├── tor_network.py         ──► Onionoo relay/bridge data
-       ├── onion_probe.py         ──► .onion reachability + TLS fingerprints
-       ├── onion_crawler.py       ──► Ahmia BFS crawler, content extraction
-       ├── blockchain.py          ──► Mempool.space, Blockchain.com
-       ├── cert_transparency.py   ──► crt.sh, CertStream
-       ├── osint_feeds.py         ──► AlienVault OTX, PhishTank
-       ├── detection_rules.py     ──► Sigma Rules, CISA KEV
-       ├── source_provenance.py   ──► Data lineage & reliability scoring
-       └── supplementary.py       ──► DShield, GreyNoise, BGP ranking
+### Entity Types Extracted
 
- PHASE 2: PROCESSING
- ───────────────────
-   Raw data  ──►  Entity Extraction (spaCy NER)
-                      │
-                      ├── BTC/ETH addresses
-                      ├── .onion URLs
-                      ├── Email addresses
-                      ├── PGP fingerprints
-                      ├── IP addresses / domains
-                      └── Handles / usernames
-                      │
-                      ▼
-                  Deduplication (mmh3 hashing)
-                      │
-                      ▼
-                  Severity Scoring (0-100)
-                      │
-                      ▼
-                  Persona Linking (Bayesian LLR)
-
- PHASE 3: STORAGE
- ────────────────
-   PostgreSQL  ◄──  Actors, Entities, ActorEntity joins,
-                    PersonaLinks, LinkEvidence, AuditLog
-                    
-   Neo4j       ◄──  Actor nodes, Entity nodes,
-                    USES/LINKED_TO/TRANSFERS_TO edges
-                    
-   Redis       ◄──  Real-time event stream,
-                    Collection run metadata,
-                    WebSocket pub/sub channels
-
- PHASE 4: DELIVERY
- ─────────────────
-   REST API    ──►  /api/v1/actors, /search, /alerts, /pipeline
-   WebSocket   ──►  ws://localhost:8000/ws/feed (live events)
-   Exports     ──►  PDF / CSV / JSON evidence packages
-   Graph API   ──►  /api/v1/actors/graph/overview (Cytoscape data)
+```mermaid
+mindmap
+  root((Entity\nExtraction))
+    Crypto
+      BTC addresses
+      ETH addresses
+      Wallet clusters
+    Network
+      .onion URLs
+      IP addresses
+      Domains
+    Identity
+      Handles / usernames
+      Email addresses
+      PGP fingerprints
+    Infrastructure
+      TLS certificates
+      Server banners
+      Favicon hashes
 ```
 
 ---
@@ -430,62 +456,193 @@ All adapters are zero-cost, requiring no API keys or paid subscriptions.
 | `/pipeline` | Pipeline Control | Trigger collections, blockchain lookup, onion probe, crawl |
 | `/search` | Entity Search | Full-text search across all intelligence |
 
+### User Journey
+
+```mermaid
+graph LR
+    LOGIN["/login"] --> DASH["/dashboard"]
+    DASH --> ACTORS["/actors"]
+    DASH --> GRAPH["/graph"]
+    DASH --> ALERTS["/alerts"]
+    DASH --> PIPE["/pipeline"]
+    DASH --> SEARCH["/search"]
+    ACTORS --> DOSSIER["/actors/[id]"]
+    DOSSIER --> GRAPH
+    PIPE -->|Blockchain Lookup| ACTORS
+    PIPE -->|Onion Probe| ACTORS
+    ALERTS -->|Triage| DOSSIER
+    SEARCH --> DOSSIER
+
+    style LOGIN fill:#1a1a1a,stroke:#555,color:#fff
+    style DASH fill:#111,stroke:#fff,color:#fff
+    style ACTORS fill:#1a1a1a,stroke:#555,color:#ccc
+    style DOSSIER fill:#1a1a1a,stroke:#555,color:#ccc
+    style GRAPH fill:#1a1a1a,stroke:#555,color:#ccc
+    style ALERTS fill:#1a1a1a,stroke:#555,color:#ccc
+    style PIPE fill:#1a1a1a,stroke:#555,color:#ccc
+    style SEARCH fill:#1a1a1a,stroke:#555,color:#ccc
+```
+
 ---
 
 ## `08` Database Schema
 
-### PostgreSQL Tables
+### PostgreSQL Schema
 
-```
-actors              Actor profiles (id, label, category, status, first/last_seen)
-entities            Extracted entities (wallets, handles, IPs, PGP, onions)
-actor_entities      Many-to-many join (actor ↔ entity)
-persona_links       Cross-platform identity links with Bayesian scores
-link_evidence       Individual evidence items supporting persona links
-audit_log           Immutable audit trail (OWASP A09 compliance)
-users               JWT-authenticated user accounts with RBAC
+```mermaid
+erDiagram
+    ACTORS {
+        string actor_id PK
+        string label
+        string category
+        string status
+        datetime first_seen
+        datetime last_seen
+        datetime last_scan_at
+    }
+    ENTITIES {
+        string entity_id PK
+        string kind
+        string value
+        float confidence
+        datetime first_seen
+        datetime last_seen
+    }
+    ACTOR_ENTITIES {
+        string actor_id FK
+        string entity_id FK
+    }
+    PERSONA_LINKS {
+        string link_id PK
+        string actor_a FK
+        string actor_b FK
+        float score
+        string band
+        string analyst_status
+    }
+    LINK_EVIDENCE {
+        int id PK
+        string link_id FK
+        string evidence_type
+        float llr
+        string raw_value
+    }
+    AUDIT_LOG {
+        int id PK
+        string actor
+        string action
+        string target
+        datetime at
+        json detail
+    }
+    USERS {
+        string user_id PK
+        string email
+        string hashed_pw
+        string role
+    }
+
+    ACTORS ||--o{ ACTOR_ENTITIES : has
+    ENTITIES ||--o{ ACTOR_ENTITIES : belongs_to
+    ACTORS ||--o{ PERSONA_LINKS : linked_as_A
+    ACTORS ||--o{ PERSONA_LINKS : linked_as_B
+    PERSONA_LINKS ||--o{ LINK_EVIDENCE : supported_by
 ```
 
 ### Neo4j Graph Schema
 
-```
- (Actor)──[:USES]──►(Entity)
-    │                   │
-    │                   ├── kind: btc_address
-    │                   ├── kind: eth_address
-    │                   ├── kind: onion_url
-    │                   ├── kind: pgp_fingerprint
-    │                   ├── kind: handle
-    │                   ├── kind: email
-    │                   └── kind: ip_address
-    │
-    └──[:LINKED_TO { score, band, evidence_count }]──►(Actor)
+```mermaid
+graph LR
+    A1((Actor)) -->|USES| E1["btc_address"]
+    A1 -->|USES| E2["onion_url"]
+    A1 -->|USES| E3["pgp_fingerprint"]
+    A1 -->|USES| E4["handle"]
+    A1 -->|USES| E5["email"]
+    A1 -->|USES| E6["ip_address"]
+    A1 -->|USES| E7["eth_address"]
 
- (Entity)──[:TRANSFERS_TO]──►(Entity)    # wallet-to-wallet flows
- (Entity)──[:HOSTS]──►(Entity)           # IP hosts onion service
- (Entity)──[:RESOLVES_TO]──►(Entity)     # domain resolution
+    A1 ---|"LINKED_TO\nscore: 87.4\nband: A"| A2((Actor))
+
+    E1 -->|TRANSFERS_TO| E8["btc_address"]
+    E6 -->|HOSTS| E2
+    E9["domain"] -->|RESOLVES_TO| E6
+
+    style A1 fill:#1a1a1a,stroke:#fff,color:#fff
+    style A2 fill:#1a1a1a,stroke:#fff,color:#fff
+    style E1 fill:#f7931a,stroke:#333,color:#000
+    style E7 fill:#627eea,stroke:#333,color:#fff
+    style E2 fill:#7D4698,stroke:#333,color:#fff
+    style E3 fill:#2ecc71,stroke:#333,color:#000
 ```
 
 ### Persona Link Scoring (Bayesian LLR)
 
-| Evidence Type | Weight | Description |
-|:-------------|:-------|:------------|
-| `pgp_fingerprint` | Very High | Same PGP key across platforms |
-| `ssh_key` | Very High | Same SSH host key |
-| `wallet_cluster` | High | Same wallet cluster |
-| `wallet_transfer` | High | Direct wallet-to-wallet transfer |
-| `cert_san` | High | TLS cert names clearnet domain |
-| `favicon` | Medium | Same favicon hash |
-| `handle_exact` | Medium | Exact handle match |
-| `handle_similar` | Low | Similar handle (fuzzy) |
-| `stylometry` | Low | Similar writing style (ML) |
-| `temporal_overlap` | Low | Overlapping activity windows |
+```mermaid
+graph LR
+    subgraph Evidence["Evidence Types"]
+        direction TB
+        VH1["PGP Fingerprint"] ---|Very High| S
+        VH2["SSH Key"] ---|Very High| S
+        H1["Wallet Cluster"] ---|High| S
+        H2["Wallet Transfer"] ---|High| S
+        H3["Cert SAN"] ---|High| S
+        M1["Favicon Hash"] ---|Medium| S
+        M2["Handle Exact"] ---|Medium| S
+        L1["Handle Similar"] ---|Low| S
+        L2["Stylometry"] ---|Low| S
+        L3["Temporal Overlap"] ---|Low| S
+    end
 
-Confidence bands: **A** (≥80) · **B** (60-79) · **C** (40-59) · **D** (20-39) · **E** (<20)
+    S["Bayesian LLR\nScoring Engine"] --> B
+
+    subgraph Bands["Confidence Bands"]
+        B["Score"] --> BA["A: 80+"]
+        B --> BB["B: 60-79"]
+        B --> BC["C: 40-59"]
+        B --> BD["D: 20-39"]
+        B --> BE["E: below 20"]
+    end
+
+    style Evidence fill:#0d0d0d,stroke:#333,color:#ccc
+    style Bands fill:#111,stroke:#444,color:#ccc
+    style BA fill:#2ecc71,stroke:#333,color:#000
+    style BB fill:#3498db,stroke:#333,color:#fff
+    style BC fill:#f39c12,stroke:#333,color:#000
+    style BD fill:#e74c3c,stroke:#333,color:#fff
+    style BE fill:#555,stroke:#333,color:#fff
+```
 
 ---
 
 ## `09` Security & Compliance
+
+### Authentication & Authorization Flow
+
+```mermaid
+sequenceDiagram
+    participant U as Analyst
+    participant FE as Next.js Frontend
+    participant API as FastAPI Backend
+    participant DB as PostgreSQL
+    participant R as Redis
+
+    U->>FE: Login (email + password)
+    FE->>API: POST /api/v1/auth/login
+    API->>DB: Verify credentials (bcrypt)
+    DB-->>API: User record
+    API->>API: Generate JWT (python-jose)
+    API->>DB: Write audit_log (LOGIN)
+    API-->>FE: { access_token, expires_in }
+    FE->>FE: Store token (sessionStorage)
+
+    U->>FE: Request /dashboard
+    FE->>API: GET /api/v1/health (Authorization: Bearer)
+    API->>API: Validate JWT + check role
+    API->>R: Rate limit check (SlowAPI)
+    R-->>API: OK
+    API-->>FE: 200 + data
+    FE-->>U: Render dashboard
+```
 
 ### OWASP Top 10 Coverage
 
@@ -501,15 +658,31 @@ Confidence bands: **A** (≥80) · **B** (60-79) · **C** (40-59) · **D** (20-3
 
 ### Legal Compliance
 
-| Framework | Alignment |
-|:----------|:----------|
-| IT Act, 2000 (§66, §69, §79) | Legal authority for monitoring |
-| IT Act §65B | Court-admissible digital evidence exports |
-| CERT-In Directions (2022) | 6-hour incident reporting capability |
-| NCIIPC Guidelines | Critical infrastructure protection |
-| STIX/TAXII 2.1 | International threat intelligence sharing |
-| MITRE ATT&CK | Adversary technique classification |
-| Budapest Convention | Cross-border cyber evidence framework |
+```mermaid
+graph LR
+    subgraph Indian["Indian Law"]
+        IT["IT Act 2000\nSections 66, 69, 79"]
+        IT65["IT Act Section 65B\nDigital Evidence"]
+        CERT["CERT-In Directions 2022\n6-hour Reporting"]
+        NCIIPC_["NCIIPC Guidelines\nCritical Infra"]
+        RBI["RBI Cyber Framework\nBanking Sector"]
+        MHA["MHA I4C Scheme\nCybercrime Coord."]
+    end
+
+    subgraph Intl["International"]
+        NIST["NIST CSF v2.0\nRisk Assessment"]
+        STIX["STIX/TAXII 2.1\nThreat Sharing"]
+        MITRE["MITRE ATT&CK\nAdversary TTPs"]
+        BUDA["Budapest Convention\nCross-border Evidence"]
+    end
+
+    NETRA((NETRA)) --> IT & IT65 & CERT & NCIIPC_ & RBI & MHA
+    NETRA --> NIST & STIX & MITRE & BUDA
+
+    style Indian fill:#0d0d0d,stroke:#333,color:#ccc
+    style Intl fill:#111,stroke:#444,color:#ccc
+    style NETRA fill:#1a1a1a,stroke:#fff,color:#fff
+```
 
 ---
 
