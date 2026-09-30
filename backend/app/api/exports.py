@@ -1,12 +1,12 @@
 """
-NETRA — Export API endpoints.
+NETRA â€” Export API endpoints.
 
 Generates real downloadable files (PDF, CSV, JSON) for:
   - Individual actor dossiers (Export Dossier)
   - Batch actor exports (Batch Export)
   - Full intel exports (Export Intel)
 
-Files are generated inline (small data) — no Celery needed for now.
+Files are generated inline (small data) â€” no Celery needed for now.
 """
 
 from __future__ import annotations
@@ -42,13 +42,13 @@ class BatchExportRequest(BaseModel):
 
 
 class IntelExportRequest(BaseModel):
-    format: str = Field(default="json", pattern=r"^(csv|json)$")
+    format: str = Field(default="json", pattern=r"^(csv|json|pdf)$")
     include_actors: bool = True
     include_entities: bool = True
     include_events: bool = False
 
 
-# ── Helper: build actor dossier dict ──────────────────────────
+# â”€â”€ Helper: build actor dossier dict â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def _build_dossier(db: AsyncSession, actor_id: str) -> dict[str, Any]:
     """Build a complete dossier dict for an actor."""
@@ -87,7 +87,7 @@ async def _build_dossier(db: AsyncSession, actor_id: str) -> dict[str, Any]:
     }
 
 
-# ── Dossier export (single actor) ─────────────────────────────
+# â”€â”€ Dossier export (single actor) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @export_router.post("/dossier")
 async def export_dossier(
@@ -134,7 +134,7 @@ async def export_dossier(
     raise HTTPException(400, "Unsupported format")
 
 
-# ── Batch export (all actors) ─────────────────────────────────
+# â”€â”€ Batch export (all actors) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @export_router.post("/batch")
 async def export_batch(
@@ -196,7 +196,7 @@ async def export_batch(
     raise HTTPException(400, "Unsupported format")
 
 
-# ── Intel export (actors + entities) ──────────────────────────
+# â”€â”€ Intel export (actors + entities) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @export_router.post("/intel")
 async def export_intel(
@@ -279,7 +279,7 @@ async def export_intel(
 
         await r.aclose()
     except Exception:
-        pass  # Redis unavailable — export DB data only
+        pass  # Redis unavailable â€” export DB data only
 
     if body.format == "json":
         content = json.dumps(data, indent=2, default=str)
@@ -304,144 +304,220 @@ async def export_intel(
             headers={"Content-Disposition": 'attachment; filename="netra_intel_export.csv"'},
         )
 
+    if body.format == "pdf":
+        pdf_bytes = _generate_intel_pdf(data)
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": 'attachment; filename="netra_intel_export.pdf"'},
+        )
+
     raise HTTPException(400, "Unsupported format")
 
 
-# ── PDF generator (text-based, no heavy deps) ─────────────────
+# â”€â”€ PDF generators (text-based, no heavy deps) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+def _sanitize_for_pdf(text: str) -> str:
+    """Replace Unicode chars with ASCII equivalents safe for PDF Courier font."""
+    replacements = {
+        "\u2500": "-", "\u2014": "--", "\u2013": "-",
+        "\u2019": "'", "\u2018": "'", "\u201c": '"', "\u201d": '"',
+        "\u2026": "...", "\u2022": "*", "\u00b7": ".",
+        "\u2717": "x", "\u2713": "v", "\u00d7": "x",
+        "\u2192": "->", "\u2190": "<-",
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    return text.encode("latin-1", errors="replace").decode("latin-1")
+
+
+def _generate_intel_pdf(data: dict) -> bytes:
+    """Generate a PDF for the full intel package export."""
+    lines = [
+        "NETRA - INTELLIGENCE PACKAGE EXPORT",
+        "=" * 60, "",
+        "CLASSIFICATION: CLASSIFIED // REL TO INTEL",
+        f"Generated: {data.get('exported_at', 'N/A')}", "",
+    ]
+
+    actors_data = data.get("actors", [])
+    lines.extend(["-" * 60, f"TRACKED ACTORS ({len(actors_data)})", "-" * 60, ""])
+    for a in actors_data[:100]:
+        status = (a.get("status") or "unknown").upper()
+        handle = (a.get("handle") or "Unknown")[:30]
+        cat = a.get("category") or "N/A"
+        lines.append(f"  [{status:8s}]  {handle:30s}  cat={cat}")
+        lines.append(f"             ID: {a.get('actor_id', 'N/A')}")
+        first = (a.get("first_seen") or "?")[:19]
+        last = (a.get("last_seen") or "?")[:19]
+        lines.append(f"             Seen: {first} to {last}")
+        lines.append("")
+
+    entities_data = data.get("entities", [])
+    lines.extend(["-" * 60, f"ENTITIES ({len(entities_data)})", "-" * 60, ""])
+    by_type: dict[str, list[str]] = {}
+    for e in entities_data[:500]:
+        kind = e.get("type") or "unknown"
+        by_type.setdefault(kind, []).append(e.get("value") or "N/A")
+    for kind, values in by_type.items():
+        lines.append(f"  {kind.upper()} ({len(values)}):")
+        for v in values[:20]:
+            lines.append(f"    - {str(v)[:70]}")
+        if len(values) > 20:
+            lines.append(f"    ... and {len(values) - 20} more")
+        lines.append("")
+
+    runs = data.get("collection_runs", {})
+    if runs:
+        lines.extend(["-" * 60, f"COLLECTION RUNS ({len(runs)})", "-" * 60, ""])
+        for src, info in runs.items():
+            items = info.get("total_items", info.get("cumulative_items", 0))
+            completed = (info.get("completed_at") or "N/A")[:19]
+            lines.append(f"  {str(src):25s}  items={items}  at={completed}")
+        lines.append("")
+
+    lines.extend(["-" * 60, "END OF INTEL PACKAGE", "-" * 60, "",
+                  "Generated by NETRA v2.0",
+                  "Networked Entity Tracking & Reconnaissance Architecture"])
+
+    return _text_to_pdf("\n".join(lines), "NETRA Intel Package Export")
+
 
 def _generate_dossier_pdf(dossier: dict) -> bytes:
-    """
-    Generate a simple but complete PDF dossier.
-    
-    Uses raw PDF generation (no external deps like reportlab/weasyprint).
-    Produces a clean, readable document.
-    """
+    """Generate a PDF for a single actor dossier."""
     handle = dossier.get("handle", "Unknown")
     lines = [
-        f"NETRA THREAT DOSSIER",
-        f"{'=' * 50}",
-        f"",
-        f"CLASSIFICATION: CLASSIFIED // REL TO INTEL",
-        f"Export ID: {dossier.get('export_id', 'N/A')}",
-        f"Generated: {dossier.get('exported_at', 'N/A')}",
-        f"",
-        f"{'─' * 50}",
-        f"SUBJECT: {handle}",
-        f"{'─' * 50}",
-        f"",
-        f"Actor ID:         {dossier.get('actor_id', 'N/A')}",
-        f"Category:         {dossier.get('category', 'Unknown')}",
-        f"Status:           {dossier.get('status', 'Unknown')}",
-        f"Confidence:       {dossier.get('confidence_score', 'N/A')} (Band {dossier.get('confidence_band', 'N/A')})",
-        f"First Seen:       {dossier.get('first_seen', 'N/A')}",
-        f"Last Seen:        {dossier.get('last_seen', 'N/A')}",
-        f"Entity Count:     {dossier.get('entity_count', 0)}",
-        f"",
+        "NETRA THREAT DOSSIER",
+        "=" * 60, "",
+        "CLASSIFICATION: CLASSIFIED // REL TO INTEL",
+        f"Export ID:  {dossier.get('export_id', 'N/A')}",
+        f"Generated: {dossier.get('exported_at', 'N/A')}", "",
+        "-" * 60, f"SUBJECT: {handle}", "-" * 60, "",
+        f"Actor ID:      {dossier.get('actor_id', 'N/A')}",
+        f"Category:      {dossier.get('category', 'Unknown')}",
+        f"Status:        {dossier.get('status', 'Unknown')}",
+        f"First Seen:    {dossier.get('first_seen', 'N/A')}",
+        f"Last Seen:     {dossier.get('last_seen', 'N/A')}",
+        f"Entity Count:  {dossier.get('entity_count', 0)}", "",
     ]
 
     if dossier.get("notes"):
-        lines.extend([
-            f"{'─' * 50}",
-            f"ANALYST NOTES",
-            f"{'─' * 50}",
-            dossier["notes"],
-            f"",
-        ])
+        lines.extend(["-" * 60, "ANALYST NOTES", "-" * 60,
+                      str(dossier["notes"])[:500], ""])
 
     entities = dossier.get("entities", {})
     if entities:
-        lines.extend([
-            f"{'─' * 50}",
-            f"LINKED ENTITIES",
-            f"{'─' * 50}",
-            f"",
-        ])
+        lines.extend(["-" * 60, "LINKED ENTITIES", "-" * 60, ""])
         for kind, values in entities.items():
             lines.append(f"  {kind.upper()} ({len(values)}):")
             for v in values:
-                lines.append(f"    - {v}")
+                lines.append(f"    - {str(v)[:70]}")
             lines.append("")
 
-    lines.extend([
-        f"{'─' * 50}",
-        f"END OF DOSSIER",
-        f"{'─' * 50}",
-        f"",
-        f"This document was generated by NETRA v2.0",
-        f"Networked Evidence & Threat-actor Relationship Analyzer",
-    ])
+    lines.extend(["-" * 60, "END OF DOSSIER", "-" * 60, "",
+                  "Generated by NETRA v2.0"])
 
-    text = "\n".join(lines)
-    return _text_to_pdf(text, f"NETRA Dossier: {handle}")
+    return _text_to_pdf("\n".join(lines), f"NETRA Dossier: {handle}")
 
 
 def _text_to_pdf(text: str, title: str) -> bytes:
-    """Convert text to a minimal valid PDF document."""
-    # Minimal PDF 1.4 spec
-    lines_arr = text.split("\n")
+    """
+    Convert text to a valid multi-page PDF document.
 
-    # Build page content stream
-    content_lines = []
-    content_lines.append("BT")
-    content_lines.append("/F1 10 Tf")
-    y = 750
-    for line in lines_arr:
-        if y < 50:
-            # New page would be needed — for simplicity, just continue
-            y = 750
-            content_lines.append("ET")
-            content_lines.append("BT")
-            content_lines.append("/F1 10 Tf")
-        # Escape special PDF characters
-        safe_line = line.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
-        content_lines.append(f"1 0 0 1 50 {y} Tm")
-        content_lines.append(f"({safe_line}) Tj")
-        y -= 14
-    content_lines.append("ET")
+    Uses Courier 9pt with proper page breaks and ASCII-safe encoding.
+    """
+    text = _sanitize_for_pdf(text)
+    all_lines = text.split("\n")
 
-    stream_content = "\n".join(content_lines)
-    stream_bytes = stream_content.encode("latin-1", errors="replace")
+    # Layout
+    PAGE_W, PAGE_H = 612, 792
+    MARGIN_L = 50
+    TOP_Y = 742
+    BOT_Y = 50
+    LH = 12
+    FONT_SZ = 9
+    MAX_CHARS = 90
 
-    # Build PDF objects
-    objects = []
-    
-    # Object 1: Catalog
-    objects.append(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj")
-    
-    # Object 2: Pages
-    objects.append(b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj")
-    
-    # Object 3: Page
-    objects.append(b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj")
-    
-    # Object 4: Content stream
-    stream_obj = b"4 0 obj\n<< /Length " + str(len(stream_bytes)).encode() + b" >>\nstream\n" + stream_bytes + b"\nendstream\nendobj"
-    objects.append(stream_obj)
-    
-    # Object 5: Font
-    objects.append(b"5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>\nendobj")
+    lines_per_page = (TOP_Y - BOT_Y) // LH
 
-    # Build PDF file
+    # Split into pages
+    pages: list[list[str]] = []
+    for i in range(0, len(all_lines), lines_per_page):
+        pages.append(all_lines[i:i + lines_per_page])
+    if not pages:
+        pages = [[""]]
+
+    def esc(s: str) -> str:
+        s = s[:MAX_CHARS]
+        return s.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+    def make_stream(page_lines: list[str]) -> bytes:
+        parts = [
+            "BT",
+            f"/F1 {FONT_SZ} Tf",
+            f"{LH} TL",
+            f"1 0 0 1 {MARGIN_L} {TOP_Y} Tm",
+        ]
+        for line in page_lines:
+            parts.append(f"({esc(line)}) '")
+        parts.append("ET")
+        return "\n".join(parts).encode("latin-1", errors="replace")
+
+    # Object numbering: 1=Catalog, 2=Pages, 3=Font, then pairs (page, stream)
+    num_pages = len(pages)
+    total_objs = 3 + num_pages * 2
+
     pdf = io.BytesIO()
-    pdf.write(b"%PDF-1.4\n")
-    
-    offsets = []
-    for obj in objects:
-        offsets.append(pdf.tell())
-        pdf.write(obj + b"\n")
-    
-    # Cross-reference table
+    pdf.write(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    offsets: dict[int, int] = {}
+
+    def write_obj(oid: int, body: bytes):
+        offsets[oid] = pdf.tell()
+        pdf.write(f"{oid} 0 obj\n".encode() + body + b"\nendobj\n")
+
+    # Page object IDs: 4, 6, 8, ... ; stream IDs: 5, 7, 9, ...
+    page_ids = [4 + i * 2 for i in range(num_pages)]
+
+    # 1: Catalog
+    write_obj(1, b"<< /Type /Catalog /Pages 2 0 R >>")
+
+    # 2: Pages tree
+    kids = " ".join(f"{pid} 0 R" for pid in page_ids)
+    write_obj(2, f"<< /Type /Pages /Kids [{kids}] /Count {num_pages} >>".encode())
+
+    # 3: Font
+    write_obj(3, b"<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>")
+
+    # Each page + its content stream
+    for idx, page_lines in enumerate(pages):
+        page_oid = page_ids[idx]
+        stream_oid = page_oid + 1
+        stream_bytes = make_stream(page_lines)
+
+        write_obj(page_oid, (
+            f"<< /Type /Page /Parent 2 0 R "
+            f"/MediaBox [0 0 {PAGE_W} {PAGE_H}] "
+            f"/Contents {stream_oid} 0 R "
+            f"/Resources << /Font << /F1 3 0 R >> >> >>"
+        ).encode())
+
+        offsets[stream_oid] = pdf.tell()
+        hdr = f"{stream_oid} 0 obj\n<< /Length {len(stream_bytes)} >>\nstream\n"
+        pdf.write(hdr.encode() + stream_bytes + b"\nendstream\nendobj\n")
+
+    # Xref table
     xref_offset = pdf.tell()
     pdf.write(b"xref\n")
-    pdf.write(f"0 {len(objects) + 1}\n".encode())
+    pdf.write(f"0 {total_objs + 1}\n".encode())
     pdf.write(b"0000000000 65535 f \n")
-    for offset in offsets:
-        pdf.write(f"{offset:010d} 00000 n \n".encode())
-    
+    for oid in range(1, total_objs + 1):
+        pdf.write(f"{offsets.get(oid, 0):010d} 00000 n \n".encode())
+
     pdf.write(b"trailer\n")
-    pdf.write(f"<< /Size {len(objects) + 1} /Root 1 0 R >>\n".encode())
+    pdf.write(f"<< /Size {total_objs + 1} /Root 1 0 R >>\n".encode())
     pdf.write(b"startxref\n")
     pdf.write(f"{xref_offset}\n".encode())
     pdf.write(b"%%EOF\n")
-    
+
     return pdf.getvalue()
+

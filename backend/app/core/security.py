@@ -238,6 +238,7 @@ class AuditAction(StrEnum):
     LOGIN_FAILED = "login_failed"
     LOGOUT = "logout"
     VIEW_ACTOR = "view_actor"
+    CREATE_ACTOR = "create_actor"
     REVIEW_LINK = "review_link"
     EXPORT = "export"
     SOURCE_TOGGLE = "source_toggle"

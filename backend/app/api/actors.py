@@ -69,7 +69,54 @@ class LinkEvidenceResponse(BaseModel):
     why: list[str]
 
 
+class CreateActorRequest(BaseModel):
+    """Request to create a new actor dossier."""
+    label: str = Field(..., min_length=1, max_length=256, description="Actor handle / name")
+    category: str | None = Field(None, description="vendor | buyer | admin | mixer | unknown")
+    status: str = Field("active", description="active | dormant | merged | unknown")
+    notes: str | None = Field(None, max_length=2000)
+
+
 # ── Endpoints ────────────────────────────────────────────────
+
+@router.post("", status_code=201)
+async def create_actor(
+    body: CreateActorRequest,
+    db: DbSession,
+    current_user: RequireAnalyst,
+) -> dict[str, Any]:
+    """Create a new actor dossier (the 'New Dossier' action)."""
+    import uuid
+
+    actor_id = str(uuid.uuid4())
+    now = datetime.now()
+    actor = Actor(
+        actor_id=actor_id,
+        label=body.label,
+        category=body.category or "unknown",
+        status=body.status,
+        first_seen=now,
+        last_seen=now,
+    )
+    db.add(actor)
+
+    # Audit log
+    db.add(AuditLog(**build_audit_entry(
+        actor=current_user.sub,
+        action=AuditAction.CREATE_ACTOR,
+        target=actor_id,
+        detail={"action": "create_actor", "label": body.label},
+    )))
+    await db.commit()
+
+    return {
+        "actor_id": actor_id,
+        "label": body.label,
+        "category": body.category or "unknown",
+        "status": body.status,
+        "created": True,
+    }
+
 
 @router.get("", response_model=list[ActorSummary])
 async def list_actors(
@@ -168,6 +215,47 @@ async def get_actor(
         entities=entities,
         links=links,
     )
+
+
+class UpdateActorRequest(BaseModel):
+    """Request to update actor fields."""
+    label: str | None = None
+    category: str | None = None
+    status: str | None = None
+    notes: str | None = None
+
+
+@router.patch("/{actor_id}")
+async def update_actor(
+    actor_id: str,
+    body: UpdateActorRequest,
+    db: DbSession,
+    current_user: RequireAnalyst,
+) -> dict[str, Any]:
+    """Update an existing actor's fields."""
+    result = await db.execute(
+        select(Actor).where(Actor.actor_id == actor_id)
+    )
+    actor = result.scalar_one_or_none()
+    if not actor:
+        raise HTTPException(status_code=404, detail="Actor not found")
+
+    if body.label is not None:
+        actor.label = body.label
+    if body.category is not None:
+        actor.category = body.category
+    if body.status is not None:
+        actor.status = body.status
+    actor.last_seen = datetime.now()
+
+    await db.commit()
+    return {
+        "actor_id": actor.actor_id,
+        "label": actor.label,
+        "category": actor.category,
+        "status": actor.status,
+        "updated": True,
+    }
 
 
 @router.get("/graph/overview")

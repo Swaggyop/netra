@@ -134,7 +134,7 @@ export default function ActorDossierPage({ params }: { params: Promise<{ id: str
             <div className="h-[1px] bg-mist my-4" />
             <div className="space-y-2">
               <button
-                onClick={() => { if (actor) watchlistApi.add(actor.actor_id).then(() => setWatchlisted(true)).catch(() => {}); }}
+                onClick={() => { if (actor) watchlistApi.add(actor.id).then(() => setWatchlisted(true)).catch(() => {}); }}
                 disabled={watchlisted}
                 className={`w-full border font-label-ui text-label-ui py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-colors ${
                   watchlisted ? 'border-status-live text-status-live bg-linen' : 'border-twilight text-twilight hover:bg-linen'
@@ -147,7 +147,7 @@ export default function ActorDossierPage({ params }: { params: Promise<{ id: str
                 onClick={async () => {
                   if (!actor) return;
                   setExportLoading(true);
-                  try { await exportsApi.dossier(actor.actor_id, 'pdf'); } catch (e) { console.error('Export failed:', e); }
+                  try { await exportsApi.dossier(actor.id, 'pdf'); } catch (e) { console.error('Export failed:', e); }
                   setExportLoading(false);
                 }}
                 disabled={exportLoading}

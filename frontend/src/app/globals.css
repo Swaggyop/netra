@@ -250,3 +250,10 @@ body {
 .text-label-uppercase { font-size: 11px; line-height: 14px; }
 .text-code-default { font-size: 13px; line-height: 18px; }
 .text-code-compact { font-size: 11px; line-height: 15px; }
+
+/* Entrance animation */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fadeUp 0.4s ease forwards; }

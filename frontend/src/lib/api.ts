@@ -88,6 +88,11 @@ export interface ActorsResponse {
   page_size: number;
 }
 export const actors = {
+  create: (body: { label: string; category?: string; status?: string; notes?: string }) =>
+    apiFetch<{ actor_id: string; label: string; created: boolean }>("/actors", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   list: async (params?: Record<string, string | number>): Promise<ActorsResponse> => {
     const qs = params ? "?" + new URLSearchParams(params as Record<string, string>).toString() : "";
     try {
@@ -340,11 +345,15 @@ export const pipeline = {
     apiFetch<{ task_id: string }>("/pipeline/collect", { method: "POST", body: JSON.stringify({ sources: [source] }) }),
   triggerAll: () =>
     apiFetch<{ task_id: string }>("/pipeline/collect/all", { method: "POST" }),
-  blockchainLookup: (addresses: string[]) =>
-    apiFetch<{ task_id: string }>("/pipeline/lookup/blockchain", {
+  blockchainLookup: (addresses: string[]) => {
+    // Backend expects { btc: [...], eth: [...] } — split by address format
+    const btc = addresses.filter(a => !a.startsWith("0x"));
+    const eth = addresses.filter(a => a.startsWith("0x"));
+    return apiFetch<{ task_id: string }>("/pipeline/lookup/blockchain", {
       method: "POST",
-      body: JSON.stringify({ addresses }),
-    }),
+      body: JSON.stringify({ btc, eth }),
+    });
+  },
   probeLookup: (urls: string[]) =>
     apiFetch<{ task_id: string }>("/pipeline/lookup/probe", {
       method: "POST",
@@ -414,6 +423,6 @@ export const exports_ = {
     downloadFile("/exports/dossier", { actor_id, format }, `dossier.${format}`),
   batch: (format: "csv" | "json" = "json", filter_status?: string) =>
     downloadFile("/exports/batch", { format, filter_status }, `netra_actors_export.${format}`),
-  intel: (format: "csv" | "json" = "json") =>
+  intel: (format: "csv" | "json" | "pdf" = "json") =>
     downloadFile("/exports/intel", { format, include_actors: true, include_entities: true }, `netra_intel_export.${format}`),
 };

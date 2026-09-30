@@ -186,6 +186,11 @@ export default function PipelinePage() {
             <button
               onClick={() => {
                 const addresses = btcAddresses.split("\n").map(s => s.trim()).filter(Boolean);
+                if (addresses.length === 0) {
+                  setTaskFeedback("✗ Blockchain lookup: enter at least one BTC or ETH address");
+                  setTimeout(() => setTaskFeedback(null), 4000);
+                  return;
+                }
                 triggerAction(() => pipeline.blockchainLookup(addresses), "blockchain lookup");
               }}
               className="border border-cerulean text-cerulean hover:opacity-80 font-label-ui text-label-ui px-4 py-2 rounded-lg flex items-center gap-2 transition-opacity"
@@ -208,6 +213,11 @@ export default function PipelinePage() {
             <button
               onClick={() => {
                 const urls = onionUrls.split("\n").map(s => s.trim()).filter(Boolean);
+                if (urls.length === 0) {
+                  setTaskFeedback("✗ Onion probe: enter at least one .onion URL");
+                  setTimeout(() => setTaskFeedback(null), 4000);
+                  return;
+                }
                 triggerAction(() => pipeline.probeLookup(urls), "onion probe");
               }}
               className="border border-cerulean text-cerulean hover:opacity-80 font-label-ui text-label-ui px-4 py-2 rounded-lg flex items-center gap-2 transition-opacity"
@@ -230,6 +240,11 @@ export default function PipelinePage() {
             <button
               onClick={() => {
                 const queries = crawlQueries.split(",").map(s => s.trim()).filter(Boolean);
+                if (queries.length === 0) {
+                  setTaskFeedback("✗ Onion crawl: enter at least one keyword");
+                  setTimeout(() => setTaskFeedback(null), 4000);
+                  return;
+                }
                 triggerAction(() => pipeline.crawl(queries), "onion crawl");
               }}
               className="border border-cerulean text-cerulean hover:opacity-80 font-label-ui text-label-ui px-4 py-2 rounded-lg flex items-center gap-2 transition-opacity"
